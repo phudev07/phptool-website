@@ -9,7 +9,7 @@
       // This script takes the current URL path and converts it
       // into a redirect to the base URL with the path stored in sessionStorage
       
-      var pathSegmentsToKeep = 1; // /phptool-website/ is 1 segment
+      var pathSegmentsToKeep = 0; // Custom domain uses root
       var l = window.location;
       l.replace(
         l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
