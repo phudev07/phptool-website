@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { collection, serverTimestamp, doc, increment, writeBatch } from 'firebase/firestore';
+import { collection, serverTimestamp, doc, increment, writeBatch, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useAntiSpam } from '../hooks/useAntiSpam';
@@ -87,6 +87,8 @@ export default function BuyLicense() {
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           setSoftwareInfo(docSnap.data());
+        } else {
+          setSoftwareInfo({});
         }
       } catch (error) {
         console.error('Error fetching software info:', error);
@@ -338,11 +340,20 @@ export default function BuyLicense() {
             
             {/* Quick Actions for owners */}
             <div className="product-quick-actions">
-              {softwareInfo?.downloadUrl && (
-                <a href={softwareInfo.downloadUrl} target="_blank" rel="noopener noreferrer" className="action-link">
-                  <Download size={18} /> Tải phần mềm
-                </a>
-              )}
+              <a 
+                href={softwareInfo?.downloadUrl || '#'} 
+                target={softwareInfo?.downloadUrl ? "_blank" : "_self"} 
+                rel="noopener noreferrer" 
+                className="action-link"
+                onClick={(e) => {
+                  if (!softwareInfo?.downloadUrl) {
+                    e.preventDefault();
+                    alert('Chưa có link tải phần mềm. Vui lòng cài đặt trong trang Admin!');
+                  }
+                }}
+              >
+                <Download size={18} /> Tải phần mềm
+              </a>
               <Link to={`/guide/${productId || 'regfb'}`} className="action-link">
                 <BookOpen size={18} /> Hướng dẫn sử dụng
               </Link>
