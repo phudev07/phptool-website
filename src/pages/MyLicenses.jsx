@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { collection, query, where, getDocs, doc, updateDoc, getDoc, addDoc, serverTimestamp, increment } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import Navbar from '../components/Layout/Navbar';
 import './MyLicenses.css';
@@ -249,56 +250,18 @@ export default function MyLicenses() {
   async function renewDaily(licenseId) {
     if (!currentUser) return;
     
-    const DAILY_FEE = 10000;
-    const balance = userProfile?.balance || 0;
-    
-    if (balance < DAILY_FEE) {
-      setToast({ type: 'error', message: `Số dư không đủ! Cần ${DAILY_FEE.toLocaleString()}đ. Hiện có: ${balance.toLocaleString()}đ` });
-      return;
-    }
-    
-    setSavingHwid(licenseId); // Reuse loading state
+    setSavingHwid(licenseId);
     
     try {
-      // Get current license to calculate new expiry
-      const license = licenses.find(l => l.id === licenseId);
-      const currentExpiry = license?.expiresAt?.toDate?.() || new Date(license?.expiresAt);
-      const now = new Date();
-      
-      // Calculate new expiry: from current expiry or from now if expired
-      let newExpiryDate;
-      if (currentExpiry > now) {
-        // Still valid: add 1 day to current expiry
-        newExpiryDate = new Date(currentExpiry);
-      } else {
-        // Expired: start from now
-        newExpiryDate = new Date();
-      }
-      newExpiryDate.setDate(newExpiryDate.getDate() + 1);
-      newExpiryDate.setHours(23, 59, 59, 999);
-      
-      // Update expiresAt on license
-      await updateDoc(doc(db, 'licenses', licenseId), {
-        expiresAt: newExpiryDate,
-        status: 'active'
+      const renewLicenseFunc = httpsCallable(functions, 'renewLicense');
+      const response = await renewLicenseFunc({
+        licenseId,
+        renewType: 'daily'
       });
       
-      // Deduct balance
-      await updateDoc(doc(db, 'users', currentUser.uid), {
-        balance: increment(-DAILY_FEE)
-      });
+      const responseData = response.data.data || response.data;
+      const newExpiryDate = new Date(responseData.newExpiryDate);
       
-      // Create transaction
-      await addDoc(collection(db, 'transactions'), {
-        userId: currentUser.uid,
-        type: 'daily_renewal',
-        amount: -DAILY_FEE,
-        description: `Gia hạn gói ngày +1 ngày`,
-        licenseId: licenseId,
-        createdAt: serverTimestamp()
-      });
-      
-      // Update local state
       setLicenses(prev => prev.map(l => 
         l.id === licenseId ? { ...l, expiresAt: newExpiryDate, status: 'active' } : l
       ));
@@ -307,7 +270,7 @@ export default function MyLicenses() {
       setToast({ type: 'success', message: `Gia hạn thành công! Hết hạn: ${expiryStr}` });
     } catch (error) {
       console.error('Error renewing daily:', error);
-      setToast({ type: 'error', message: 'Lỗi: ' + error.message });
+      setToast({ type: 'error', message: error.message || 'Lỗi hệ thống khi gia hạn.' });
     }
     
     setSavingHwid(null);
@@ -317,66 +280,24 @@ export default function MyLicenses() {
   async function renewLicense() {
     if (!renewModal || !currentUser) return;
     
-    const options = RENEWAL_OPTIONS[renewModal.productId];
-    if (!options) {
-      setToast({ type: 'error', message: 'Không tìm thấy gói gia hạn cho sản phẩm này!' });
-      return;
-    }
-    
-    const selectedOption = options[renewPlan];
-    if (!selectedOption) {
+    if (!renewPlan) {
       setToast({ type: 'error', message: 'Vui lòng chọn gói gia hạn!' });
-      return;
-    }
-    
-    const balance = userProfile?.balance || 0;
-    if (balance < selectedOption.price) {
-      setToast({ type: 'error', message: `Số dư không đủ! Cần ${formatMoney(selectedOption.price)}đ, hiện có ${formatMoney(balance)}đ` });
       return;
     }
     
     setRenewLoading(true);
     
     try {
-      // Calculate new expiry date
-      let newExpiryDate;
-      const currentExpiry = renewModal.expiresAt?.toDate?.() || new Date(renewModal.expiresAt);
-      const now = new Date();
-      
-      if (currentExpiry > now) {
-        // License still active: add days to current expiry
-        newExpiryDate = new Date(currentExpiry);
-        newExpiryDate.setDate(newExpiryDate.getDate() + selectedOption.days);
-      } else {
-        // License expired: start from today
-        newExpiryDate = new Date();
-        newExpiryDate.setDate(newExpiryDate.getDate() + selectedOption.days);
-      }
-      
-      // Update license
-      await updateDoc(doc(db, 'licenses', renewModal.id), {
-        expiresAt: newExpiryDate,
-        status: 'active',
-        renewedAt: serverTimestamp()
-      });
-      
-      // Deduct balance from user
-      await updateDoc(doc(db, 'users', currentUser.uid), {
-        balance: increment(-selectedOption.price)
-      });
-      
-      // Create transaction record
-      await addDoc(collection(db, 'transactions'), {
-        userId: currentUser.uid,
-        userEmail: currentUser.email,
-        type: 'renewal',
-        amount: -selectedOption.price,
-        description: `Gia hạn ${getProductName(renewModal.productId)} - ${selectedOption.name}`,
+      const renewLicenseFunc = httpsCallable(functions, 'renewLicense');
+      const response = await renewLicenseFunc({
         licenseId: renewModal.id,
-        createdAt: serverTimestamp()
+        renewType: 'standard',
+        planKey: renewPlan
       });
       
-      // Update local state
+      const responseData = response.data.data || response.data;
+      const newExpiryDate = new Date(responseData.newExpiryDate);
+
       setLicenses(prev => prev.map(l => 
         l.id === renewModal.id 
           ? { ...l, expiresAt: newExpiryDate, status: 'active' } 
@@ -391,7 +312,7 @@ export default function MyLicenses() {
       
     } catch (error) {
       console.error('Error renewing license:', error);
-      setToast({ type: 'error', message: 'Lỗi gia hạn: ' + error.message });
+      setToast({ type: 'error', message: error.message || 'Lỗi hệ thống khi gia hạn.' });
     }
     
     setRenewLoading(false);

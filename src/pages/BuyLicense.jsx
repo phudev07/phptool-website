@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { collection, addDoc, serverTimestamp, doc, updateDoc, increment, getDoc } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useAntiSpam } from '../hooks/useAntiSpam';
 import Navbar from '../components/Layout/Navbar';
@@ -145,56 +146,29 @@ export default function BuyLicense() {
     setLoading(true);
 
     try {
-      const licenseKey = generateLicenseKey();
+      const purchaseLicenseFunc = httpsCallable(functions, 'purchaseLicense');
+      const response = await purchaseLicenseFunc({
+        productId: productId || 'regfb',
+        planKey: selectedPlan
+      });
       
-      let expiryDate;
-      if (selectedPlan === 'daily') {
-        expiryDate = new Date();
-        expiryDate.setDate(expiryDate.getDate() + 1);
-        expiryDate.setHours(23, 59, 59, 999);
-      } else {
-        expiryDate = getExpiryDate(plan.days);
+      const purchaseData = response.data.data || response.data;
+      if (purchaseData.expiresAt) {
+        purchaseData.expiresAt = new Date(purchaseData.expiresAt);
       }
 
-      await addDoc(collection(db, 'licenses'), {
-        userId: currentUser.uid,
-        userEmail: currentUser.email,
-        productId: productId || 'regfb',
-        licenseKey: licenseKey,
-        plan: selectedPlan,
-        planName: plan.name,
-        price: plan.price,
-        status: 'active',
-        hwid: null,
-        expiresAt: expiryDate,
-        createdAt: serverTimestamp()
-      });
-
-      await updateDoc(doc(db, 'users', currentUser.uid), {
-        balance: increment(-plan.price)
-      });
-
-      await addDoc(collection(db, 'transactions'), {
-        userId: currentUser.uid,
-        type: 'license_purchase',
-        amount: -plan.price,
-        productId: productId || 'regfb',
-        description: `Mua ${product.name} - ${plan.name}`,
-        createdAt: serverTimestamp()
-      });
-
       setPurchaseSuccess({
-        product: product.name,
-        plan: plan.name,
-        licenseKey: licenseKey,
-        expiresAt: expiryDate
+        product: purchaseData.product,
+        plan: purchaseData.plan,
+        licenseKey: purchaseData.licenseKey,
+        expiresAt: purchaseData.expiresAt
       });
 
       setShowConfirm(false);
 
     } catch (error) {
       console.error('Error purchasing license:', error);
-      alert('Có lỗi xảy ra. Vui lòng thử lại!');
+      alert(error.message || 'Có lỗi xảy ra. Vui lòng thử lại!');
     }
 
     setLoading(false);

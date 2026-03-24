@@ -4,7 +4,7 @@
  * Tự động cộng tiền vào tài khoản user
  */
 
-const { onRequest } = require("firebase-functions/v2/https");
+const { onRequest, onCall, HttpsError } = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 
 admin.initializeApp();
@@ -141,3 +141,258 @@ exports.health = onRequest(
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   }
 );
+
+// Product definitions (mirrored from client)
+const PRODUCTS = {
+  'regfb': {
+    name: 'Tool Auto Reg/Very FB LD và Phone',
+    plans: {
+      'daily': { name: 'Theo ngày', price: 10000, days: 0 },
+      'monthly': { name: '1 Tháng', price: 200000, days: 30 },
+      'yearly': { name: '1 Năm', price: 500000, days: 365 },
+      'lifetime': { name: 'Vĩnh viễn', price: 600000, days: -1 }
+    }
+  }
+};
+
+function generateLicenseKey() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let key = '';
+  for (let i = 0; i < 4; i++) {
+    for (let j = 0; j < 4; j++) {
+      key += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    if (i < 3) key += '-';
+  }
+  return key;
+}
+
+function getExpiryDate(days) {
+  if (days <= 0) return null;
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date;
+}
+
+/**
+ * Callable function to process license purchase securely
+ */
+exports.purchaseLicense = onCall(
+  { region: "asia-southeast1", cors: true },
+  async (request) => {
+    // Ensure user is authenticated
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Bạn cần đăng nhập để mua hàng.");
+    }
+
+    const { productId, planKey } = request.data;
+    const uid = request.auth.uid;
+    const email = request.auth.token.email || '';
+
+    const product = PRODUCTS[productId] || PRODUCTS['regfb'];
+    if (!product) {
+      throw new HttpsError("invalid-argument", "Sản phẩm không tồn tại.");
+    }
+
+    const plan = product.plans[planKey];
+    if (!plan) {
+      throw new HttpsError("invalid-argument", "Gói License không tồn tại.");
+    }
+
+    const userRef = db.collection('users').doc(uid);
+
+    try {
+      // Run the purchase inside a transaction to prevent race conditions
+      const result = await db.runTransaction(async (t) => {
+        const userDoc = await t.get(userRef);
+        if (!userDoc.exists) {
+          throw new HttpsError("not-found", "User không tồn tại.");
+        }
+
+        const balance = userDoc.data().balance || 0;
+        if (balance < plan.price) {
+          throw new HttpsError("failed-precondition", "Số dư không đủ! Vui lòng nạp thêm tiền.");
+        }
+
+        // Deduct balance
+        t.update(userRef, { balance: admin.firestore.FieldValue.increment(-plan.price) });
+
+        const licenseRef = db.collection('licenses').doc();
+        const transactionRef = db.collection('transactions').doc();
+        
+        const licenseKey = generateLicenseKey();
+        
+        let expiryDate;
+        if (planKey === 'daily') {
+          expiryDate = new Date();
+          expiryDate.setDate(expiryDate.getDate() + 1);
+          // Set to end of tomorrow
+          expiryDate.setHours(23, 59, 59, 999);
+        } else {
+          expiryDate = getExpiryDate(plan.days);
+        }
+
+        // Add license
+        t.set(licenseRef, {
+          userId: uid,
+          userEmail: email,
+          productId: productId || 'regfb',
+          licenseKey: licenseKey,
+          plan: planKey,
+          planName: plan.name,
+          price: plan.price,
+          status: 'active',
+          hwid: null,
+          expiresAt: expiryDate ? admin.firestore.Timestamp.fromDate(expiryDate) : null,
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        // Add transaction record
+        t.set(transactionRef, {
+          userId: uid,
+          type: 'license_purchase',
+          amount: -plan.price,
+          productId: productId || 'regfb',
+          description: `Mua ${product.name} - ${plan.name}`,
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        return {
+          product: product.name,
+          plan: plan.name,
+          licenseKey: licenseKey,
+          expiresAt: expiryDate ? expiryDate.toISOString() : null
+        };
+      });
+
+      return { success: true, data: result };
+
+    } catch (error) {
+      console.error("Purchase error:", error);
+      if (error instanceof HttpsError) {
+        throw error;
+      }
+      throw new HttpsError("internal", error.message || "Có lỗi xảy ra khi mua hàng.");
+    }
+  }
+);
+
+exports.renewLicense = onCall({ region: "asia-southeast1", cors: true }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Bạn cần đăng nhập để thao tác.");
+  }
+
+  const { licenseId, renewType, planKey } = request.data;
+  const uid = request.auth.uid;
+
+  if (!licenseId || !renewType) {
+    throw new HttpsError("invalid-argument", "Thiếu thông tin gia hạn.");
+  }
+
+  const userRef = db.collection('users').doc(uid);
+  const licenseRef = db.collection('licenses').doc(licenseId);
+
+  try {
+    const result = await db.runTransaction(async (t) => {
+      const userDoc = await t.get(userRef);
+      if (!userDoc.exists) {
+        throw new HttpsError("not-found", "User không tồn tại.");
+      }
+
+      const licenseDoc = await t.get(licenseRef);
+      if (!licenseDoc.exists) {
+        throw new HttpsError("not-found", "License không tồn tại.");
+      }
+
+      const licenseData = licenseDoc.data();
+      if (licenseData.userId !== uid) {
+        throw new HttpsError("permission-denied", "Không có quyền gia hạn license này.");
+      }
+
+      const balance = userDoc.data().balance || 0;
+      let cost = 0;
+      let daysToAdd = 0;
+      let planName = '';
+      let txType = '';
+      let txDesc = '';
+
+      if (renewType === 'daily') {
+        cost = 10000;
+        daysToAdd = 1;
+        planName = 'Gia hạn ngày (10k)';
+        txType = 'daily_renewal';
+        txDesc = 'Gia hạn gói ngày +1 ngày';
+      } else if (renewType === 'standard') {
+        // defined in client matching structure
+        const RENEWAL_OPTIONS = {
+          'regfb': { '1_month': { name: '1 Tháng', price: 200000, days: 30 }, '1_year': { name: '1 Năm', price: 500000, days: 365 } },
+          'clonetk': { '1_month': { name: '1 Tháng', price: 300000, days: 30 }, '1_year': { name: '1 Năm', price: 700000, days: 365 } },
+          'seoyt': { '1_month': { name: '1 Tháng', price: 400000, days: 30 }, '1_year': { name: '1 Năm', price: 900000, days: 365 } }
+        };
+        const options = RENEWAL_OPTIONS[licenseData.productId];
+        if (!options || !options[planKey]) {
+          throw new HttpsError("invalid-argument", "Gói gia hạn không hợp lệ.");
+        }
+        cost = options[planKey].price;
+        daysToAdd = options[planKey].days;
+        planName = options[planKey].name;
+        txType = 'renewal';
+        txDesc = `Gia hạn ${licenseData.productId} - ${planName}`;
+      } else {
+        throw new HttpsError("invalid-argument", "Loại gia hạn không hợp lệ.");
+      }
+
+      if (balance < cost) {
+        throw new HttpsError("failed-precondition", `Số dư không đủ! Cần ${cost}đ.`);
+      }
+
+      let newExpiryDate;
+      const currentExpiry = licenseData.expiresAt?.toDate?.() || new Date(licenseData.expiresAt);
+      const now = new Date();
+
+      if (currentExpiry > now) {
+        newExpiryDate = new Date(currentExpiry);
+      } else {
+        newExpiryDate = new Date();
+      }
+      newExpiryDate.setDate(newExpiryDate.getDate() + daysToAdd);
+      
+      if (renewType === 'daily') {
+        newExpiryDate.setHours(23, 59, 59, 999);
+      }
+
+      t.update(userRef, { balance: admin.firestore.FieldValue.increment(-cost) });
+
+      t.update(licenseRef, {
+        expiresAt: admin.firestore.Timestamp.fromDate(newExpiryDate),
+        status: 'active',
+        renewedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      const transactionRef = db.collection('transactions').doc();
+      t.set(transactionRef, {
+        userId: uid,
+        userEmail: request.auth.token.email || '',
+        type: txType,
+        amount: -cost,
+        description: txDesc,
+        licenseId: licenseId,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      return {
+        newExpiryDate: newExpiryDate.toISOString(),
+        cost: cost
+      };
+    });
+
+    return { success: true, data: result };
+
+  } catch (error) {
+    console.error("Renew error:", error);
+    if (error instanceof HttpsError) {
+      throw error;
+    }
+    throw new HttpsError("internal", error.message || "Lỗi gia hạn.");
+  }
+});

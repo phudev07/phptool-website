@@ -368,14 +368,15 @@
 /* Mobile Menu */
 .mobile-menu {
   display: none;
-  position: fixed;
+  position: absolute;
   top: 64px;
   left: 0;
-  right: 0;
-  bottom: 0;
+  width: 100%;
+  height: calc(100vh - 64px);
   background: var(--nav-bg);
   backdrop-filter: blur(12px);
   padding: 1.5rem;
+  padding-bottom: 100px;
   transform: translateX(100%);
   transition: transform 0.3s ease;
   overflow-y: auto;
