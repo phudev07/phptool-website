@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { collection, addDoc, serverTimestamp, doc, updateDoc, increment, getDoc } from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
-import { db, functions } from '../services/firebase';
+import { collection, serverTimestamp, doc, increment, writeBatch } from 'firebase/firestore';
+import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useAntiSpam } from '../hooks/useAntiSpam';
 import Navbar from '../components/Layout/Navbar';
@@ -146,29 +145,71 @@ export default function BuyLicense() {
     setLoading(true);
 
     try {
-      const purchaseLicenseFunc = httpsCallable(functions, 'purchaseLicense');
-      const response = await purchaseLicenseFunc({
-        productId: productId || 'regfb',
-        planKey: selectedPlan
-      });
-      
-      const purchaseData = response.data.data || response.data;
-      if (purchaseData.expiresAt) {
-        purchaseData.expiresAt = new Date(purchaseData.expiresAt);
+      const licenseKey = generateLicenseKey();
+      let expiryDate;
+      if (selectedPlan === 'daily') {
+        expiryDate = new Date();
+        expiryDate.setDate(expiryDate.getDate() + 1);
+        expiryDate.setHours(23, 59, 59, 999);
+      } else {
+        expiryDate = getExpiryDate(plan.days);
       }
 
+      // Use WriteBatch instead of multiple addDoc/updateDoc
+      const batch = writeBatch(db);
+
+      // 1. Create license doc
+      const licenseRef = doc(collection(db, 'licenses'));
+      batch.set(licenseRef, {
+        userId: currentUser.uid,
+        userEmail: currentUser.email,
+        productId: productId || 'regfb',
+        licenseKey: licenseKey,
+        plan: selectedPlan,
+        planName: plan.name,
+        price: plan.price,
+        status: 'active',
+        hwid: null,
+        expiresAt: expiryDate,
+        createdAt: serverTimestamp()
+      });
+
+      // 2. Update user balance
+      const userRef = doc(db, 'users', currentUser.uid);
+      batch.update(userRef, {
+        balance: increment(-plan.price)
+      });
+
+      // 3. Create transaction record
+      const transactionRef = doc(collection(db, 'transactions'));
+      batch.set(transactionRef, {
+        userId: currentUser.uid,
+        type: 'license_purchase',
+        amount: -plan.price,
+        productId: productId || 'regfb',
+        description: `Mua ${product.name} - ${plan.name}`,
+        createdAt: serverTimestamp()
+      });
+
+      // Commit all operations atomically
+      await batch.commit();
+
       setPurchaseSuccess({
-        product: purchaseData.product,
-        plan: purchaseData.plan,
-        licenseKey: purchaseData.licenseKey,
-        expiresAt: purchaseData.expiresAt
+        product: product.name,
+        plan: plan.name,
+        licenseKey: licenseKey,
+        expiresAt: expiryDate
       });
 
       setShowConfirm(false);
 
     } catch (error) {
       console.error('Error purchasing license:', error);
-      alert(error.message || 'Có lỗi xảy ra. Vui lòng thử lại!');
+      if (error.code === 'permission-denied') {
+        alert('Giao dịch thất bại: Số dư không đủ!');
+      } else {
+        alert('Lỗi: ' + error.message);
+      }
     }
 
     setLoading(false);

@@ -272,7 +272,7 @@ exports.purchaseLicense = onCall(
       if (error instanceof HttpsError) {
         throw error;
       }
-      throw new HttpsError("internal", error.message || "Có lỗi xảy ra khi mua hàng.");
+      throw new HttpsError("internal", "INTERNAL_ERR: " + (error.stack || error.message || "Có lỗi xảy ra."));
     }
   }
 );
@@ -393,6 +393,6 @@ exports.renewLicense = onCall({ region: "asia-southeast1", cors: true }, async (
     if (error instanceof HttpsError) {
       throw error;
     }
-    throw new HttpsError("internal", error.message || "Lỗi gia hạn.");
+    throw new HttpsError("internal", "INTERNAL_ERR: " + (error.stack || error.message || "Lỗi."));
   }
 });
