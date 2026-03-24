@@ -6,7 +6,7 @@ import {
   onAuthStateChanged,
   updateProfile
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../services/firebase';
 
 const AuthContext = createContext();
@@ -72,20 +72,39 @@ export function AuthProvider({ children }) {
   }
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    let unsubProfile = null;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
       
       if (user) {
-        const profile = await fetchUserProfile(user.uid);
-        setUserProfile(profile);
+        // Use onSnapshot for real-time updates of balance and profile
+        const docRef = doc(db, 'users', user.uid);
+        unsubProfile = onSnapshot(docRef, (docSnap) => {
+          if (docSnap.exists()) {
+            setUserProfile(docSnap.data());
+          } else {
+            setUserProfile(null);
+          }
+          setLoading(false);
+        }, (error) => {
+          console.error("Error fetching user profile snapshot:", error);
+          setLoading(false);
+        });
       } else {
+        if (unsubProfile) {
+          unsubProfile();
+          unsubProfile = null;
+        }
         setUserProfile(null);
+        setLoading(false);
       }
-      
-      setLoading(false);
     });
 
-    return unsubscribe;
+    return () => {
+      unsubscribeAuth();
+      if (unsubProfile) unsubProfile();
+    };
   }, []);
 
   const value = {
