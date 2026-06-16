@@ -26,7 +26,7 @@ export async function getProducts() {
           features: prod.features || [],
           plans: prod.plans || {},
           version: prod.id === 'regfb' ? '3.0.0.5' : '1.0.0',
-          downloadUrl: prod.id === 'regfb' ? 'https://dl.toolmarket.dev/regfb/latest.zip' : '',
+          downloadUrl: '',
           changelog: prod.id === 'regfb' ? '- Cập nhật API Facebook mới nhất.\n- Sửa lỗi checkpoint 282.\n- Tối ưu hóa tốc độ tạo tài khoản.' : '- Phiên bản đầu tiên.',
           icon: prod.id === 'regfb' ? 'terminal' : prod.id === 'photoshop_panel' ? 'image' : 'smart_display'
         };
