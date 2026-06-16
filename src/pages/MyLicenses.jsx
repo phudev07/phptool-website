@@ -1,628 +1,638 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect } from'react';
 import { Link } from 'react-router-dom';
-import { collection, query, where, getDocs, doc, updateDoc, getDoc, addDoc, serverTimestamp, increment, writeBatch } from 'firebase/firestore';
-import { db } from '../services/firebase';
-import { useAuth } from '../contexts/AuthContext';
-import Navbar from '../components/Layout/Navbar';
-import './MyLicenses.css';
-
-// Renewal pricing options
-const RENEWAL_OPTIONS = {
-  'regfb': {
-    '1_month': { name: '1 Tháng', price: 200000, days: 30 },
-    '1_year': { name: '1 Năm', price: 500000, days: 365 }
-  },
-  'clonetk': {
-    '1_month': { name: '1 Tháng', price: 300000, days: 30 },
-    '1_year': { name: '1 Năm', price: 700000, days: 365 }
-  },
-  'seoyt': {
-    '1_month': { name: '1 Tháng', price: 400000, days: 30 },
-    '1_year': { name: '1 Năm', price: 900000, days: 365 }
-  }
-};
+import { collection, query, where, getDocs, doc, updateDoc, getDoc, setDoc, serverTimestamp } from'firebase/firestore';
+import { db } from'../services/firebase';
+import { useAuth } from'../contexts/AuthContext';
+import Navbar from'../components/Layout/Navbar';
+import { getProducts } from'../services/productsService';
 
 export default function MyLicenses() {
-  const { currentUser, userProfile } = useAuth();
-  const [licenses, setLicenses] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedLicense, setSelectedLicense] = useState(null);
-  const [hwidInput, setHwidInput] = useState({});  // { licenseId: 'hwid value' }
-  const [savingHwid, setSavingHwid] = useState(null);  // licenseId being saved
-  const [toast, setToast] = useState(null);  // { type: 'success'|'error', message: string }
-  const [renewModal, setRenewModal] = useState(null);  // license to renew
-  const [renewPlan, setRenewPlan] = useState('1_month');
-  const [renewLoading, setRenewLoading] = useState(false);
+ const { currentUser } = useAuth();
+ const [licenses, setLicenses] = useState([]);
+ const [productsMap, setProductsMap] = useState({});
+ const [selectedLicense, setSelectedLicense] = useState(null);
+ const [loading, setLoading] = useState(true);
+ 
+ // HWID input for each license
+ const [hwidInput, setHwidInput] = useState('');
+ const [activating, setActivating] = useState(false);
+ const [resetting, setResetting] = useState(false);
+ const [showInstructions, setShowInstructions] = useState(false);
+ const [copiedKey, setCopiedKey] = useState(false);
+ const [secureDownloadUrl, setSecureDownloadUrl] = useState('');
 
-  // Auto-hide toast after 5 seconds
-  useEffect(() => {
-    if (toast) {
-      const timer = setTimeout(() => setToast(null), 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [toast]);
+ useEffect(() => {
+ async function loadData() {
+ if (!currentUser) return;
+ setLoading(true);
+ try {
+ // 1. Fetch products to get latest downloadUrls and versions
+ const productsList = await getProducts();
+ const pMap = {};
+ productsList.forEach(p => {
+ pMap[p.id] = p;
+ });
+ setProductsMap(pMap);
 
-  useEffect(() => {
-    async function fetchLicenses() {
-      if (!currentUser) return;
+ // 2. Fetch licenses for current user
+ const q = query(
+ collection(db,'licenses'),
+ where('userId','==', currentUser.uid)
+ );
+ const snapshot = await getDocs(q);
+ const licensesData = snapshot.docs.map(doc => ({
+ id: doc.id,
+ ...doc.data(),
+ licenseKey: doc.data().licenseKey || doc.data().key
+ }));
+ 
+ // Sort descending by creation date
+ licensesData.sort((a, b) => {
+ const dateA = a.createdAt?.toDate?.() || new Date(0);
+ const dateB = b.createdAt?.toDate?.() || new Date(0);
+ return dateB - dateA;
+ });
 
-      try {
-        // Simple query without orderBy to avoid index requirement
-        const q = query(
-          collection(db, 'licenses'),
-          where('userId', '==', currentUser.uid)
-        );
-        const snapshot = await getDocs(q);
-        let licensesData = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          // Normalize: use licenseKey or key
-          licenseKey: doc.data().licenseKey || doc.data().key
-        }));
-        
-        // Sort client-side by createdAt desc
-        licensesData.sort((a, b) => {
-          const dateA = a.createdAt?.toDate?.() || new Date(0);
-          const dateB = b.createdAt?.toDate?.() || new Date(0);
-          return dateB - dateA;
-        });
-        
-        console.log('MyLicenses fetched:', licensesData);
-        setLicenses(licensesData);
-      } catch (error) {
-        console.error('Error fetching licenses:', error);
-        alert('Lỗi tải licenses: ' + error.message);
-      }
+ // 3. Fetch active tools mapping
+ const activeToolsSnapshot = await getDocs(collection(db, 'users', currentUser.uid, 'active_tools'));
+ const activeToolsSet = new Set(activeToolsSnapshot.docs.map(d => d.id));
 
-      setLoading(false);
-    }
+ // Backward compatibility: verify active_tools records for any active licenses
+ try {
+   const activeLicenses = licensesData.filter(l => l.status === 'active');
+   for (const lic of activeLicenses) {
+     if (!activeToolsSet.has(lic.productId)) {
+       const activeToolRef = doc(db, 'users', currentUser.uid, 'active_tools', lic.productId);
+       await setDoc(activeToolRef, { 
+         active: true, 
+         licenseId: lic.id, 
+         updatedAt: serverTimestamp() 
+       });
+       activeToolsSet.add(lic.productId);
+     }
+   }
+ } catch (err) {
+   console.error("Error updating active tools for backward compatibility:", err);
+ }
 
-    fetchLicenses();
-  }, [currentUser]);
+ // Add virtual licenses for tools owned via active_tools but having no key (requireHwid === false)
+ activeToolsSnapshot.docs.forEach(d => {
+   const prodId = d.id;
+   const activeData = d.data();
+   const alreadyListed = licensesData.some(l => l.productId === prodId);
+   if (!alreadyListed && activeData.active === true) {
+     const prod = pMap[prodId];
+     licensesData.push({
+       id: `virtual_${prodId}`,
+       userId: currentUser.uid,
+       productId: prodId,
+       productName: prod?.name || prodId,
+       licenseKey: 'Không yêu cầu (Direct Run)',
+       plan: activeData.plan || 'lifetime',
+       planName: activeData.plan === 'lifetime' ? 'Vĩnh viễn' : (activeData.plan === 'monthly' ? 'Gói tháng' : 'Gói của bạn'),
+       price: 0,
+       status: 'active',
+       hwid: null,
+       expiresAt: null,
+       createdAt: activeData.updatedAt || null
+     });
+   }
+ });
 
-  function formatMoney(amount) {
-    return new Intl.NumberFormat('vi-VN').format(amount);
-  }
+ // Re-sort including virtual licenses
+ licensesData.sort((a, b) => {
+   const dateA = a.createdAt?.toDate?.() || new Date(0);
+   const dateB = b.createdAt?.toDate?.() || new Date(0);
+   return dateB - dateA;
+ });
 
-  function getLicenseStatus(license) {
-    if (license.status === 'revoked') return { text: 'Đã thu hồi', class: 'status-revoked' };
-    if (license.plan === 'lifetime') return { text: 'Vĩnh viễn', class: 'status-lifetime' };
+ setLicenses(licensesData);
 
-    const now = new Date();
-    const expiry = license.expiresAt?.toDate?.() || (license.expiresAt ? new Date(license.expiresAt) : null);
+ // Auto-select license if productId is passed in query string
+ const urlParams = new URLSearchParams(window.location.search);
+ const targetProdId = urlParams.get('productId');
+ if (targetProdId) {
+   const matchedLic = licensesData.find(l => l.productId === targetProdId);
+   if (matchedLic) {
+     setSelectedLicense(matchedLic);
+     setHwidInput(matchedLic.hwid || '');
+     // Fetch secure URL
+     try {
+       const secureDocRef = doc(db, 'products_secure', matchedLic.productId);
+       const secureDocSnap = await getDoc(secureDocRef);
+       if (secureDocSnap.exists()) {
+         setSecureDownloadUrl(secureDocSnap.data().downloadUrl || '');
+       }
+     } catch (err) {
+       console.error("Error fetching secure download URL on auto-select:", err);
+     }
+   } else {
+     setSelectedLicense(null);
+     setHwidInput('');
+   }
+ } else {
+   setSelectedLicense(null);
+   setHwidInput('');
+ }
+ } catch (error) {
+ console.error('Error fetching user licenses:', error);
+ }
+ setLoading(false);
+ }
+ loadData();
+ }, [currentUser]);
 
-    if (!expiry) {
-      // No expiry set - for old daily licenses
-      if (license.plan === 'daily') return { text: 'Theo ngày', class: 'status-daily' };
-      return { text: 'Đang hoạt động', class: 'status-active' };
-    }
+ function formatMoney(amount) {
+ return new Intl.NumberFormat('vi-VN').format(amount);
+ }
 
-    if (now >= expiry) return { text: 'Hết hạn', class: 'status-expired' };
-    
-    const diff = expiry - now;
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    
-    if (license.plan === 'daily') {
-      // Show remaining time for daily
-      if (days === 0) return { text: `Còn ${hours}h`, class: 'status-warning' };
-      return { text: `Còn ${days}d ${hours}h`, class: 'status-daily' };
-    }
-    
-    if (days <= 3) return { text: `Còn ${days} ngày`, class: 'status-warning' };
-    return { text: 'Đang hoạt động', class: 'status-active' };
-  }
+ function getPlanLabel(lic) {
+  if (lic.planName) return lic.planName;
+  if (lic.plan === 'lifetime') return 'Vĩnh viễn';
+  if (lic.plan === 'free') return 'Miễn phí';
+  if (lic.plan === 'daily') return 'Theo ngày';
+  if (lic.plan === 'monthly') return 'Gói tháng';
+  return 'Gói tháng';
+ }
 
-  function getProductName(productId) {
-    const products = {
-      'regfb': 'Reg Facebook Tool',
-      'clonetk': 'Clone TikTok Tool',
-      'seoyt': 'YouTube SEO Tool'
-    };
-    return products[productId] || productId;
-  }
+ function getExpiryStatus(license) {
+ if (license.status ==='revoked') return { text:'Đã thu hồi', class:'bg-error-container text-error border-error/20' };
+ if (license.plan ==='lifetime') return { text:'Vĩnh viễn', class:'bg-[#dcfce7] text-[#166534] border-[#bbf7d0]' };
 
-  function getPlanName(plan) {
-    const plans = {
-      'daily': 'Theo ngày',
-      'monthly': '1 tháng',
-      'yearly': '1 năm',
-      'lifetime': 'Vĩnh viễn'
-    };
-    return plans[plan] || plan;
-  }
+ const now = new Date();
+ const expiry = license.expiresAt?.toDate?.() || (license.expiresAt ? new Date(license.expiresAt) : null);
 
-  function copyToClipboard(text) {
-    navigator.clipboard.writeText(text);
-    alert('Đã copy!');
-  }
+ if (!expiry) {
+ return { text:'Đang hoạt động', class:'bg-[#dcfce7] text-[#166534] border-[#bbf7d0]' };
+ }
 
-  // User tự reset HWID (không cần admin duyệt)
-  async function resetHwid(licenseId) {
-    setSavingHwid(licenseId);
+ if (now >= expiry) return { text:'Hết hạn', class:'bg-[#fee2e2] text-[#991b1b] border-[#fecaca]' };
+ 
+ const diff = expiry - now;
+ const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+ 
+ if (days <= 3) return { text: `Còn ${days} ngày`, class:'bg-amber-100 text-amber-800 border-amber-200' };
+ return { text:'Đang hoạt động', class:'bg-[#dcfce7] text-[#166534] border-[#bbf7d0]' };
+ }
+
+ function copyToClipboard(text) {
+ navigator.clipboard.writeText(text);
+ setCopiedKey(true);
+ setTimeout(() => setCopiedKey(false), 2000);
+ }
+
+  async function handleActivateHwid() {
+    if (!selectedLicense || !hwidInput.trim()) return;
+    setActivating(true);
     try {
-      // Get current license to save old HWID to history
-      const license = licenses.find(l => l.id === licenseId);
-      const currentHwid = license?.hwid;
-      
-      // Update: set hwid to null and add old hwid to history
-      const updateData = {
-        hwid: null,
-        hwidResetRequested: false
+      const docRef = doc(db,'licenses', selectedLicense.id);
+      const updatePayload = {
+        hwid: hwidInput.trim()
       };
-      
-      // If there was an HWID, add it to history to prevent reuse
-      if (currentHwid) {
-        const { arrayUnion } = await import('firebase/firestore');
-        updateData.hwidHistory = arrayUnion(currentHwid);
+      if (selectedLicense.status !== 'active') {
+        updatePayload.status = 'active';
       }
-      
-      await updateDoc(doc(db, 'licenses', licenseId), updateData);
-      
-      setLicenses(prev => prev.map(l => 
-        l.id === licenseId ? { 
-          ...l, 
-          hwid: null, 
-          hwidResetRequested: false,
-          hwidHistory: [...(l.hwidHistory || []), currentHwid].filter(Boolean)
-        } : l
-      ));
-      
-      setToast({ type: 'success', message: 'Đã reset HWID. Bạn có thể gán máy mới.' });
-    } catch (error) {
-      console.error('Error resetting HWID:', error);
-      setToast({ type: 'error', message: 'Lỗi reset HWID: ' + error.message });
-    }
-    setSavingHwid(null);
-  }
+      await updateDoc(docRef, updatePayload);
 
-  // User tự gán HWID vào license
-  async function saveHwid(licenseId) {
-    const hwid = hwidInput[licenseId]?.trim();
-    if (!hwid || hwid.length < 20) {
-      setToast({ type: 'error', message: 'HWID không hợp lệ! Vui lòng nhập đúng HWID từ tool.' });
-      return;
-    }
-
-    setSavingHwid(licenseId);
-    
-    try {
-      // IMPORTANT: Check if HWID is already used by another license
-      const existingQuery = query(
-        collection(db, 'licenses'),
-        where('hwid', '==', hwid)
-      );
-      const existingSnapshot = await getDocs(existingQuery);
-      
-      // Check if any existing license with this HWID belongs to different user
-      const existingLicense = existingSnapshot.docs.find(doc => doc.id !== licenseId);
-      
-      if (existingLicense) {
-        const existingData = existingLicense.data();
-        setToast({ 
-          type: 'error', 
-          message: `HWID này đã được đăng ký bởi tài khoản khác (${existingData.userEmail || 'unknown'})! Mỗi HWID chỉ có thể kích hoạt 1 license.`
-        });
-        setSavingHwid(null);
-        return;
-      }
-      
-      // SECURITY: Check if HWID was previously used and reset by ANOTHER USER
-      const allLicenses = await getDocs(collection(db, 'licenses'));
-      for (const licDoc of allLicenses.docs) {
-        const licData = licDoc.data();
-        const hwidHistory = licData.hwidHistory || [];
-        
-        // If this HWID is in history of a license belonging to DIFFERENT user, block it
-        // Allow same user to reuse their own HWID
-        if (hwidHistory.includes(hwid) && licDoc.id !== licenseId && licData.userId !== currentUser.uid) {
-          setToast({ 
-            type: 'error', 
-            message: 'HWID này đã từng được sử dụng bởi tài khoản khác! Không thể gán.'
-          });
-          setSavingHwid(null);
-          return;
+      // Update state
+      const updatedLicenses = licenses.map(l => {
+        if (l.id === selectedLicense.id) {
+          const updated = { ...l, hwid: hwidInput.trim(), status:'active' };
+          setSelectedLicense(updated);
+          return updated;
         }
-      }
-      
-      await updateDoc(doc(db, 'licenses', licenseId), {
-        hwid: hwid,
-        status: 'active',
-        activatedAt: new Date()
+        return l;
       });
-      
-      setLicenses(prev => prev.map(l => 
-        l.id === licenseId ? { ...l, hwid: hwid, status: 'active' } : l
-      ));
-      
-      setHwidInput(prev => ({ ...prev, [licenseId]: '' }));
-      setToast({ type: 'success', message: 'Kích hoạt license thành công! Vui lòng khởi động lại tool để sử dụng.' });
+      setLicenses(updatedLicenses);
+      alert('Đã kích hoạt HWID thành công!');
     } catch (error) {
-      console.error('Error saving HWID:', error);
-      setToast({ type: 'error', message: 'Lỗi kích hoạt: ' + error.message });
+      console.error('Error activating HWID:', error);
+      alert('Kích hoạt thất bại:' + error.message);
     }
-    
-    setSavingHwid(null);
+    setActivating(false);
   }
 
-  // Gia hạn gói ngày (10k/ngày) - cộng thêm 1 ngày
-  async function renewDaily(licenseId) {
-    if (!currentUser) return;
-    
-    const DAILY_FEE = 10000;
-    const balance = userProfile?.balance || 0;
-    
-    if (balance < DAILY_FEE) {
-      setToast({ type: 'error', message: `Số dư không đủ! Cần ${DAILY_FEE.toLocaleString()}đ. Hiện có: ${balance.toLocaleString()}đ` });
-      return;
-    }
-    
-    setSavingHwid(licenseId); // Reuse loading state
-    
-    try {
-      const license = licenses.find(l => l.id === licenseId);
-      const currentExpiry = license?.expiresAt?.toDate?.() || new Date(license?.expiresAt);
-      const now = new Date();
-      
-      let newExpiryDate;
-      if (currentExpiry > now) {
-        newExpiryDate = new Date(currentExpiry);
-      } else {
-        newExpiryDate = new Date();
-      }
-      newExpiryDate.setDate(newExpiryDate.getDate() + 1);
-      newExpiryDate.setHours(23, 59, 59, 999);
-      
-      const batch = writeBatch(db);
-      
-      // Update license
-      const licenseRef = doc(db, 'licenses', licenseId);
-      batch.update(licenseRef, {
-        expiresAt: newExpiryDate,
-        status: 'active'
-      });
-      
-      // Update user
-      const userRef = doc(db, 'users', currentUser.uid);
-      batch.update(userRef, {
-        balance: increment(-DAILY_FEE)
-      });
-      
-      // Create transaction
-      const transactionRef = doc(collection(db, 'transactions'));
-      batch.set(transactionRef, {
-        userId: currentUser.uid,
-        type: 'daily_renewal',
-        amount: -DAILY_FEE,
-        description: `Gia hạn gói ngày +1 ngày`,
-        licenseId: licenseId,
-        createdAt: serverTimestamp()
-      });
-      
-      await batch.commit();
-      
-      setLicenses(prev => prev.map(l => 
-        l.id === licenseId ? { ...l, expiresAt: newExpiryDate, status: 'active' } : l
-      ));
-      
-      const expiryStr = newExpiryDate.toLocaleDateString('vi-VN');
-      setToast({ type: 'success', message: `Gia hạn thành công! Hết hạn: ${expiryStr}` });
-    } catch (error) {
-      console.error('Error renewing daily:', error);
-      if (error.code === 'permission-denied') {
-        setToast({ type: 'error', message: 'Giao dịch thất bại: Số dư không đủ!' });
-      } else {
-        setToast({ type: 'error', message: 'Lỗi: ' + error.message });
+ async function handleResetHwid() {
+ if (!selectedLicense) return;
+ if (!window.confirm('Bạn có chắc chắn muốn reset HWID cho key này?')) return;
+ setResetting(true);
+ try {
+ const currentHwid = selectedLicense.hwid;
+ const hwidHistory = selectedLicense.hwidHistory || [];
+ if (currentHwid) {
+ hwidHistory.push(currentHwid);
+ }
+
+ const docRef = doc(db,'licenses', selectedLicense.id);
+ await updateDoc(docRef, {
+ hwid: null,
+ hwidHistory: hwidHistory
+ });
+
+ // Update state
+ const updatedLicenses = licenses.map(l => {
+ if (l.id === selectedLicense.id) {
+ const updated = { ...l, hwid: null, hwidHistory };
+ setSelectedLicense(updated);
+ setHwidInput('');
+ return updated;
+ }
+ return l;
+ });
+ setLicenses(updatedLicenses);
+ alert('Đã reset HWID thành công! Bạn có thể gán HWID thiết bị mới.');
+ } catch (error) {
+ console.error('Error resetting HWID:', error);
+ alert('Reset thất bại:' + error.message);
+ }
+ setResetting(false);
+ }
+
+ async function handleSelectLicense(lic) {
+    setSelectedLicense(lic);
+    setHwidInput(lic.hwid ||'');
+    setShowInstructions(false);
+    setSecureDownloadUrl('');
+
+    if (lic && lic.productId) {
+      try {
+        const secureDocRef = doc(db, 'products_secure', lic.productId);
+        const secureDocSnap = await getDoc(secureDocRef);
+        if (secureDocSnap.exists()) {
+          setSecureDownloadUrl(secureDocSnap.data().downloadUrl || '');
+        }
+      } catch (err) {
+        console.error("Error fetching secure download URL:", err);
       }
     }
-    
-    setSavingHwid(null);
-  }
+ }
 
-  // Gia hạn license
-  async function renewLicense() {
-    if (!renewModal || !currentUser) return;
-    
-    const options = RENEWAL_OPTIONS[renewModal.productId];
-    if (!options) {
-      setToast({ type: 'error', message: 'Không tìm thấy gói gia hạn cho sản phẩm này!' });
-      return;
-    }
-    
-    const selectedOption = options[renewPlan];
-    if (!selectedOption) {
-      setToast({ type: 'error', message: 'Vui lòng chọn gói gia hạn!' });
-      return;
-    }
-    
-    const balance = userProfile?.balance || 0;
-    if (balance < selectedOption.price) {
-      setToast({ type: 'error', message: `Số dư không đủ! Cần ${formatMoney(selectedOption.price)}đ, hiện có ${formatMoney(balance)}đ` });
-      return;
-    }
-    
-    setRenewLoading(true);
-    
-    try {
-      let newExpiryDate;
-      const currentExpiry = renewModal.expiresAt?.toDate?.() || new Date(renewModal.expiresAt);
-      const now = new Date();
-      
-      if (currentExpiry > now) {
-        newExpiryDate = new Date(currentExpiry);
-        newExpiryDate.setDate(newExpiryDate.getDate() + selectedOption.days);
-      } else {
-        newExpiryDate = new Date();
-        newExpiryDate.setDate(newExpiryDate.getDate() + selectedOption.days);
-      }
-      
-      const batch = writeBatch(db);
-      
-      // Update license
-      const licenseRef = doc(db, 'licenses', renewModal.id);
-      batch.update(licenseRef, {
-        expiresAt: newExpiryDate,
-        status: 'active',
-        renewedAt: serverTimestamp()
-      });
-      
-      // Deduct balance
-      const userRef = doc(db, 'users', currentUser.uid);
-      batch.update(userRef, {
-        balance: increment(-selectedOption.price)
-      });
-      
-      // Create transaction record
-      const transactionRef = doc(collection(db, 'transactions'));
-      batch.set(transactionRef, {
-        userId: currentUser.uid,
-        userEmail: currentUser.email,
-        type: 'renewal',
-        amount: -selectedOption.price,
-        description: `Gia hạn ${getProductName(renewModal.productId)} - ${selectedOption.name}`,
-        licenseId: renewModal.id,
-        createdAt: serverTimestamp()
-      });
-      
-      await batch.commit();
-      
-      setLicenses(prev => prev.map(l => 
-        l.id === renewModal.id 
-          ? { ...l, expiresAt: newExpiryDate, status: 'active' } 
-          : l
-      ));
-      
-      setToast({ 
-        type: 'success', 
-        message: `Gia hạn thành công! License mới hết hạn: ${newExpiryDate.toLocaleDateString('vi-VN')}` 
-      });
-      setRenewModal(null);
-      
-    } catch (error) {
-      console.error('Error renewing license:', error);
-      if (error.code === 'permission-denied') {
-        setToast({ type: 'error', message: 'Giao dịch bị từ chối: Số dư không đủ!' });
-      } else {
-        setToast({ type: 'error', message: 'Lỗi gia hạn: ' + error.message });
-      }
-    }
-    
-    setRenewLoading(false);
-  }
+ const selectedProduct = selectedLicense ? productsMap[selectedLicense.productId] : null;
 
-  return (
-    <div className="licenses-page">
-      <Navbar />
+ return (
+ <div className="min-h-screen bg-background text-on-background">
+ <Navbar />
 
-      {/* Toast Notification */}
-      {toast && (
-        <div className={`toast toast-${toast.type}`}>
-          <span className="toast-icon">{toast.type === 'success' ? '✅' : '❌'}</span>
-          <span className="toast-message">{toast.message}</span>
-          <button className="toast-close" onClick={() => setToast(null)}>×</button>
-        </div>
-      )}
+ <main className="md:ml-sidebar-width pt-header-height min-h-screen bg-background">
+ <div className="max-w-container-max mx-auto p-4 md:p-gutter">
+ 
+ <div className="mb-8">
+ <h2 className="font-headline-lg text-headline-lg text-on-surface mb-2">Quản lý Tool</h2>
+ <p className="font-body-lg text-body-lg text-secondary">Quản lý danh sách phần mềm đã mua và kích hoạt bản quyền.</p>
+ </div>
 
-      <div className="licenses-container">
-        <div className="page-header">
-          <Link to="/dashboard" className="back-link">← Quay lại</Link>
-          <h1>🔑 License của tôi</h1>
-        </div>
+ {loading ? (
+ <div className="flex flex-col items-center justify-center py-20">
+ <div className="w-10 h-10 border-4 border-[#c21a5b] border-t-transparent rounded-full animate-spin"></div>
+ <p className="text-secondary mt-4">Đang tải giấy phép sử dụng...</p>
+ </div>
+ ) : licenses.length === 0 ? (
+ <div className="text-center py-16 bg-surface-container-lowest border border-outline-variant rounded-xl max-w-xl mx-auto">
+ <span className="material-symbols-outlined text-[64px] text-secondary mb-3">vpn_key</span>
+ <h3 className="text-lg font-bold text-on-surface mb-1">Chưa mua bản quyền nào</h3>
+ <p className="text-secondary mb-6 text-sm">Bạn chưa sở hữu bản quyền tool nào của chúng tôi.</p>
+ <a href="/" className="bg-gradient-to-r from-[#c21a5b] to-[#571477] text-white font-label-md text-label-md px-6 py-2.5 rounded-lg hover:bg-on-primary-fixed-variant transition-colors shadow-sm">
+ Mua Tool Ngay
+ </a>
+ </div>
+ ) : !selectedLicense ? (
+ /* Purchase/Order History Table View */
+ <div className="bg-surface border border-outline-variant rounded-xl overflow-hidden shadow-sm">
+ <div className="p-6 border-b border-outline-variant bg-surface-container-low/50">
+ <h3 className="font-headline-md text-headline-md text-on-surface font-bold">Đơn hàng của bạn</h3>
+ <p className="text-secondary text-sm mt-1">Lịch sử giao dịch và kích hoạt HWID cho các phần mềm đã mua.</p>
+ </div>
+ <div className="overflow-x-auto">
+ <table className="w-full text-left border-collapse">
+ <thead>
+ <tr className="bg-surface-container-low border-b border-outline-variant font-label-md text-label-md text-on-surface-variant uppercase tracking-wider text-xs">
+ <th className="px-6 py-4">Tên Tool</th>
+ <th className="px-6 py-4">Gói</th>
+ <th className="px-6 py-4">Ngày mua</th>
+ <th className="px-6 py-4">Hạn dùng</th>
+ <th className="px-6 py-4">Trạng thái</th>
+ <th className="px-6 py-4 text-center">Thao tác</th>
+ </tr>
+ </thead>
+ <tbody className="font-body-md text-body-md divide-y divide-outline-variant text-sm text-on-surface">
+ {licenses.map(lic => {
+ const prod = productsMap[lic.productId];
+ const status = getExpiryStatus(lic);
+ const purchaseDate = lic.createdAt?.toDate?.().toLocaleDateString('vi-VN') ||'N/A';
+ const expiryDate = lic.plan ==='lifetime' ?'Vĩnh viễn' : lic.expiresAt?.toDate?.().toLocaleDateString('vi-VN') ||'N/A';
 
-        {loading ? (
-          <div className="loading">Đang tải...</div>
-        ) : licenses.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-icon">📦</div>
-            <h2>Chưa có license nào</h2>
-            <p>Mua license để bắt đầu sử dụng các công cụ của chúng tôi!</p>
-            <Link to="/buy" className="btn-buy">🛒 Mua license ngay</Link>
-          </div>
-        ) : (
-          <>
-            <div className="licenses-grid">
-            {licenses.map(license => {
-              const status = getLicenseStatus(license);
-              return (
-                <div key={license.id} className="license-card">
-                  <div className="license-header">
-                    <h3>{getProductName(license.productId)}</h3>
-                    <span className={`license-status ${status.class}`}>{status.text}</span>
-                  </div>
-                  
-                  <div className="license-body">
-                    <div className="license-key-section">
-                      <label>License Key:</label>
-                      <div className="key-display">
-                        <code>{license.licenseKey}</code>
-                        <button 
-                          className="btn-copy"
-                          onClick={() => copyToClipboard(license.licenseKey)}
-                        >
-                          📋
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="license-details">
-                      <div className="detail-row">
-                        <span className="label">Gói:</span>
-                        <span className="value">{getPlanName(license.plan)}</span>
-                      </div>
-                      {license.expiresAt && license.plan !== 'daily' && (
-                        <div className="detail-row">
-                          <span className="label">Hết hạn:</span>
-                          <span className="value">
-                            {license.expiresAt?.toDate?.().toLocaleDateString('vi-VN') || 'N/A'}
-                          </span>
-                        </div>
-                      )}
-                      <div className="detail-row">
-                        <span className="label">HWID:</span>
-                        {license.hwid ? (
-                          <span className="value hwid" title={license.hwid}>
-                            {license.hwid.substring(0, 20)}...
-                          </span>
-                        ) : (
-                          <span className="value hwid-pending">Chưa kích hoạt</span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Nếu chưa có HWID → Hiện form nhập HWID */}
-                    {!license.hwid && license.status !== 'revoked' && (
-                      <div className="hwid-activation-section">
-                        <p className="hwid-instruction">
-                          📌 Mở tool → Copy HWID → Paste vào đây để kích hoạt:
-                        </p>
-                        <div className="hwid-input-group">
-                          <input
-                            type="text"
-                            placeholder="Paste HWID từ tool vào đây..."
-                            value={hwidInput[license.id] || ''}
-                            onChange={(e) => setHwidInput(prev => ({
-                              ...prev,
-                              [license.id]: e.target.value
-                            }))}
-                            className="hwid-input"
-                          />
-                          <button
-                            className="btn-activate"
-                            onClick={() => saveHwid(license.id)}
-                            disabled={savingHwid === license.id}
-                          >
-                            {savingHwid === license.id ? '⏳' : '✓'} Kích hoạt
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Nếu đã có HWID → Hiện nút reset */}
-                    {license.hwid && license.status === 'active' && (
-                      <button 
-                        className="btn-reset-hwid"
-                        onClick={() => resetHwid(license.id)}
-                        disabled={savingHwid === license.id}
-                      >
-                        {savingHwid === license.id ? '⏳' : '🔄'} Đổi máy
-                      </button>
-                    )}
-
-                    {/* Renewal button for monthly/yearly plans */}
-                    {license.plan !== 'lifetime' && license.plan !== 'daily' && license.status !== 'revoked' && (
-                      <button 
-                        className="btn-renew"
-                        onClick={() => { setRenewModal(license); setRenewPlan('1_month'); }}
-                      >
-                        ⏰ Gia hạn
-                      </button>
-                    )}
-
-                    {/* Daily renewal button - 10k per day */}
-                    {license.plan === 'daily' && license.hwid && license.status !== 'revoked' && (
-                      <button 
-                        className="btn-renew btn-daily"
-                        onClick={() => renewDaily(license.id)}
-                        disabled={savingHwid === license.id}
-                      >
-                        {savingHwid === license.id ? '⏳' : '⚡'} Gia hạn ngày (10.000đ)
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="license-footer">
-                    <span className="created-date">
-                      Mua ngày: {license.createdAt?.toDate?.().toLocaleDateString('vi-VN') || 'N/A'}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          </>
-        )}
+ return (
+ <tr key={lic.id} className="hover:bg-surface-container-low/30 transition-colors">
+ <td className="px-6 py-4 font-semibold flex items-center gap-3">
+ <div className="w-8 h-8 rounded overflow-hidden flex items-center justify-center shrink-0 border border-outline-variant bg-surface-container">
+    {prod?.image ? (
+      <img src={prod.image} alt={prod?.name} className="w-full h-full object-fill" />
+    ) : (
+      <div className="w-full h-full bg-gradient-to-r from-[#c21a5b] to-[#571477] text-white flex items-center justify-center font-bold">
+        <span className="material-symbols-outlined text-[18px]">
+          {prod?.icon ||'terminal'}
+        </span>
       </div>
+    )}
+  </div>
+ <span>{prod?.name || lic.productName || lic.productId}</span>
+ </td>
+ <td className="px-6 py-4 uppercase font-bold text-xs">
+ {getPlanLabel(lic)}
+ </td>
+ <td className="px-6 py-4 text-secondary">
+ {purchaseDate}
+ </td>
+ <td className="px-6 py-4 text-secondary">
+ {expiryDate}
+ </td>
+ <td className="px-6 py-4">
+ <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${status.class}`}>
+ {status.text}
+ </span>
+ </td>
+ <td className="px-6 py-4 text-center">
+ <button
+ onClick={() => handleSelectLicense(lic)}
+ className="bg-gradient-to-r from-[#c21a5b] to-[#571477] text-white font-label-md text-xs px-4 py-2 rounded-lg hover:opacity-95 transition-all shadow-sm font-bold"
+ >
+ Chi tiết
+ </button>
+ </td>
+ </tr>
+ );
+ })}
+ </tbody>
+ </table>
+ </div>
+ </div>
+ ) : (
+ <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+ 
+ {/* Left Column: Detailed View of Selected License */}
+ <div className="lg:col-span-8 space-y-6">
+ {selectedLicense && (
+ <div className="bg-surface-bright border border-outline-variant rounded-xl p-6 shadow-sm">
+ 
+ {/* Back to list button */}
+ <button 
+ onClick={() => setSelectedLicense(null)} 
+ className="flex items-center gap-2 text-secondary hover:text-[#c21a5b] transition-colors mb-6 font-semibold text-sm focus:outline-none"
+ >
+ <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+ Quay lại danh sách đơn hàng
+ </button>
 
-      {/* Renewal Modal */}
-      {renewModal && (
-        <div className="modal-overlay" onClick={() => setRenewModal(null)}>
-          <div className="renew-modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>⏰ Gia hạn License</h2>
-              <button className="modal-close" onClick={() => setRenewModal(null)}>×</button>
-            </div>
-            
-            <div className="modal-body">
-              <div className="renew-info">
-                <p><strong>Sản phẩm:</strong> {getProductName(renewModal.productId)}</p>
-                <p><strong>License:</strong> {renewModal.licenseKey}</p>
-                <p><strong>Hết hạn:</strong> {renewModal.expiresAt?.toDate?.().toLocaleDateString('vi-VN') || 'N/A'}</p>
-              </div>
-              
-              <div className="renew-options">
-                <h3>Chọn gói gia hạn:</h3>
-                {RENEWAL_OPTIONS[renewModal.productId] && Object.entries(RENEWAL_OPTIONS[renewModal.productId]).map(([key, option]) => (
-                  <label 
-                    key={key} 
-                    className={`renew-option ${renewPlan === key ? 'selected' : ''}`}
-                  >
-                    <input
-                      type="radio"
-                      name="renewPlan"
-                      value={key}
-                      checked={renewPlan === key}
-                      onChange={() => setRenewPlan(key)}
-                    />
-                    <span className="option-name">{option.name}</span>
-                    <span className="option-price">{formatMoney(option.price)}đ</span>
-                  </label>
-                ))}
-              </div>
-              
-              <div className="renew-balance">
-                <span>Số dư hiện tại:</span>
-                <span className="balance-amount">{formatMoney(userProfile?.balance || 0)}đ</span>
-              </div>
-            </div>
-            
-            <div className="modal-footer">
-              <button 
-                className="btn-cancel" 
-                onClick={() => setRenewModal(null)}
-              >
-                Hủy
-              </button>
-              <button 
-                className="btn-confirm"
-                onClick={renewLicense}
-                disabled={renewLoading}
-              >
-                {renewLoading ? '⏳ Đang xử lý...' : '✓ Xác nhận gia hạn'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+ {/* Header */}
+ <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8 pb-6 border-b border-outline-variant/60">
+ <div className="flex items-center gap-4">
+ <div className="w-16 h-16 rounded-lg overflow-hidden flex items-center justify-center shrink-0 border border-outline-variant bg-surface-container">
+    {selectedProduct?.image ? (
+      <img src={selectedProduct.image} alt={selectedProduct?.name} className="w-full h-full object-fill" />
+    ) : (
+      <div className="w-full h-full bg-gradient-to-r from-[#c21a5b] to-[#571477] text-white flex items-center justify-center font-bold">
+        <span className="material-symbols-outlined text-3xl">
+          {selectedProduct?.icon ||'terminal'}
+        </span>
+      </div>
+    )}
+  </div>
+ <div>
+ <h3 className="font-headline-md text-headline-md text-on-surface font-bold">
+ {selectedProduct?.name || selectedLicense.productName ||'Bản quyền phần mềm'}
+ </h3>
+ <p className="font-body-md text-body-md text-secondary mt-1">
+ {selectedProduct?.tagline ||'Phiên bản chuyên nghiệp'}
+ </p>
+ </div>
+ </div>
+ <span className={`px-3 py-1 rounded-full font-label-md text-label-md border flex items-center gap-1 ${getExpiryStatus(selectedLicense).class}`}>
+ {getExpiryStatus(selectedLicense).text}
+ </span>
+ </div>
+
+ {/* Usage Info Grid */}
+ <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+ <div className="bg-surface-container-low border border-outline-variant rounded-lg p-4">
+ <div className="font-label-md text-label-md text-secondary mb-1">Gói</div>
+ <div className="font-body-lg text-body-lg text-on-surface font-bold uppercase">
+ {getPlanLabel(selectedLicense)}
+ </div>
+ </div>
+ <div className="bg-surface-container-low border border-outline-variant rounded-lg p-4">
+ <div className="font-label-md text-label-md text-secondary mb-1">Hạn dùng</div>
+ <div className="font-body-lg text-body-lg text-on-surface font-bold">
+ {selectedLicense.plan ==='lifetime' ?'Vĩnh viễn' : selectedLicense.expiresAt?.toDate?.().toLocaleDateString('vi-VN') ||'N/A'}
+ </div>
+ </div>
+ <div className="bg-surface-container-low border border-outline-variant rounded-lg p-4">
+ <div className="font-label-md text-label-md text-secondary mb-1">Thiết bị</div>
+ <div className="font-body-lg text-body-lg text-on-surface font-bold">
+ {selectedProduct?.requireHwid === false ? 'Không yêu cầu' : (selectedLicense.hwid ? '1/1 PC (Đã gắn)' : '0/1 PC (Chưa gắn)')}
+ </div>
+ </div>
+ </div>
+
+ {/* Download Section */}
+ <div className="mb-8">
+ <h4 className="font-label-md text-label-md text-on-surface uppercase tracking-wider mb-4">Tải về &amp; Cài đặt</h4>
+ <div className="flex flex-col sm:flex-row gap-4">
+ <a 
+ href={secureDownloadUrl ||'#'} 
+ target="_blank" 
+ rel="noopener noreferrer"
+ className={`flex-1 font-label-md text-label-md py-3 px-6 rounded-lg flex items-center justify-center gap-2 transition-colors shadow-sm text-center ${secureDownloadUrl ?'bg-gradient-to-r from-[#c21a5b] to-[#571477] text-white hover:opacity-95' :'bg-surface-container-high text-secondary cursor-not-allowed border border-outline-variant'}`}
+ onClick={(e) => !secureDownloadUrl && e.preventDefault()}
+ >
+ <span className="material-symbols-outlined">download</span>
+ Tải phần mềm {selectedProduct?.version ? `v${selectedProduct.version}` :''}
+ </a>
+ <button 
+ onClick={() => setShowInstructions(!showInstructions)}
+ className="flex-1 bg-surface text-[#c21a5b] border border-[#c21a5b] font-label-md text-label-md py-3 px-6 rounded-lg flex items-center justify-center gap-2 hover:bg-surface-container transition-colors"
+ >
+ <span className="material-symbols-outlined">menu_book</span>
+ {showInstructions ?'Đóng hướng dẫn' :'Hướng dẫn sử dụng'}
+ </button>
+ </div>
+
+ {/* Expanded In-place Instructions */}
+ {showInstructions && (
+ <div className="mt-4 p-5 bg-surface-container-low border border-outline-variant rounded-xl space-y-4 animate-fadeIn">
+ <h5 className="font-label-md text-label-md text-on-surface font-bold">📋 Các bước kích hoạt tool:</h5>
+ {selectedProduct?.requireHwid === false ? (
+    <ol className="list-decimal pl-5 space-y-2 text-on-surface-variant font-body-md">
+      <li>Nhấn nút <strong>Tải phần mềm</strong> ở trên để tải file nén.</li>
+      <li>Giải nén ra thư mục trên máy tính của bạn.</li>
+      <li>Mở phần mềm lên và bắt đầu sử dụng trực tiếp mà không cần kích hoạt thiết bị!</li>
+    </ol>
+  ) : (
+    <ol className="list-decimal pl-5 space-y-2 text-on-surface-variant font-body-md">
+      <li>Nhấn nút <strong>Tải phần mềm</strong> ở trên để tải file nén.</li>
+      <li>Giải nén và chạy file thực thi client của tool.</li>
+      <li>Tool khi chạy lên sẽ tự động hiển thị <strong>HWID (Hardware ID)</strong> của máy bạn. Copy dòng HWID đó.</li>
+      <li>Quay lại trang này, dán HWID vào ô <strong>HWID (Hardware ID)</strong> bên dưới và nhấn <strong>Kích hoạt</strong>.</li>
+      <li>Khởi động lại tool trên máy tính để bắt đầu sử dụng!</li>
+    </ol>
+  )}
+ 
+ {selectedProduct?.videoTutorial && (
+ <div className="pt-4 border-t border-outline-variant/60">
+ <h5 className="font-label-md text-label-md text-on-surface font-bold mb-3">🎥 Video hướng dẫn chi tiết:</h5>
+ <div className="aspect-video w-full rounded-lg overflow-hidden border border-outline-variant bg-surface-container">
+ <iframe 
+ src={selectedProduct.videoTutorial} 
+ title="YouTube video player" 
+ className="w-full h-full border-none" 
+ allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+ allowFullScreen
+ />
+ </div>
+ </div>
+ )}
+ </div>
+ )}
+ </div>
+
+ {/* License/HWID Section */}
+ <div>
+ <h4 className="font-label-md text-label-md text-on-surface uppercase tracking-wider mb-4">Quản lý Bản quyền</h4>
+  <div className="space-y-4">
+  {selectedProduct?.requireHwid === false ? (
+    <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-400">
+      <div className="flex items-center gap-2 font-bold mb-1">
+        <span className="material-symbols-outlined text-emerald-400">check_circle</span>
+        <span>Phần mềm không yêu cầu HWID</span>
+      </div>
+      <p className="text-xs text-secondary mt-1">
+        Giấy phép này có thể sử dụng trên nhiều máy tính cùng một lúc mà không bị giới hạn phần cứng. Bạn chỉ cần tải phần mềm về và mở lên chạy trực tiếp.
+      </p>
     </div>
-  );
+  ) : (
+    <div>
+      {/* HWID Binding */}
+      <div className="space-y-2">
+      <label className="block font-label-md text-label-md text-secondary mb-2 flex justify-between">
+      <span>HWID (Hardware ID)</span>
+      <button onClick={() => setShowInstructions(true)} className="text-[#c21a5b] hover:underline text-xs">
+      Cách lấy HWID?
+      </button>
+      </label>
+
+      {selectedLicense.hwid ? (
+      /* Bound HWID State */
+      <div className="flex flex-col sm:flex-row gap-3">
+      <input 
+      className="flex-1 bg-surface-container-low border border-outline-variant rounded-lg py-3 px-4 font-mono-sm text-mono-sm text-secondary" 
+      readOnly 
+      type="text" 
+      value={selectedLicense.hwid}
+      />
+      <button 
+      onClick={handleResetHwid}
+      disabled={resetting}
+      className="bg-error text-on-error font-label-md text-label-md py-3 px-6 rounded-lg hover:bg-red-700 transition-colors whitespace-nowrap flex items-center justify-center gap-1.5"
+      >
+      {resetting ? (
+      <div className="w-5 h-5 border-2 border-on-error border-t-transparent rounded-full animate-spin"></div>
+      ) : (
+      <>
+      <span className="material-symbols-outlined text-[18px]">restart_alt</span>
+      Reset HWID
+      </>
+      )}
+      </button>
+      </div>
+      ) : (
+      /* Unbound HWID State: Activate input */
+      <div className="flex gap-3">
+      <input 
+      className="flex-1 bg-surface border border-outline-variant rounded-lg py-3 px-4 font-mono-sm text-mono-sm text-on-surface focus:outline-none focus:border-[#c21a5b] focus:ring-1 focus:ring-primary" 
+      placeholder="Dán HWID máy tính của bạn vào đây..." 
+      type="text"
+      value={hwidInput}
+      onChange={(e) => setHwidInput(e.target.value)}
+      />
+      <button 
+      onClick={handleActivateHwid}
+      disabled={activating || !hwidInput.trim()}
+      className="bg-gradient-to-r from-[#c21a5b] to-[#571477] text-white font-label-md text-label-md py-3 px-6 rounded-lg hover:bg-on-primary-fixed-variant transition-colors whitespace-nowrap disabled:bg-surface-container-high disabled:text-secondary disabled:cursor-not-allowed flex items-center justify-center"
+      >
+      {activating ? (
+      <div className="w-5 h-5 border-2 border-on-primary border-t-transparent rounded-full animate-spin"></div>
+      ) : (
+      'Kích hoạt'
+      )}
+      </button>
+      </div>
+      )}
+
+      <p className="font-body-md text-body-md text-secondary mt-2 text-xs">
+      Lưu ý: Sau khi kích hoạt HWID, giấy phép sẽ được khóa cố định vào thiết bị này. Nếu cần đổi thiết bị khác, hãy nhấn nút <strong>Reset HWID</strong> trước khi gán.
+      </p>
+      </div>
+    </div>
+  )}
+  </div>
+  </div>
+  </div>
+  )}
+  </div>
+
+ {/* Right Column: Other purchased tools list */}
+ <div className="lg:col-span-4 space-y-4">
+ <h3 className="font-label-md text-label-md text-secondary uppercase tracking-wider mb-2">Bản quyền của bạn</h3>
+ <div className="flex flex-col gap-3">
+ {licenses.map(lic => {
+ const prod = productsMap[lic.productId];
+ const isSelected = selectedLicense?.id === lic.id;
+ const status = getExpiryStatus(lic);
+
+ return (
+ <div 
+ key={lic.id} 
+ onClick={() => handleSelectLicense(lic)}
+ className={`border rounded-xl p-4 flex items-center gap-4 cursor-pointer transition-all group ${isSelected ?'bg-surface-container-lowest border-[#c21a5b] shadow-sm' :'bg-surface-bright border-outline-variant hover:border-[#c21a5b] hover:bg-surface-container-lowest'}`}
+ >
+ <div className="w-12 h-12 rounded-lg overflow-hidden flex items-center justify-center shrink-0 border border-outline-variant bg-surface-container">
+    {prod?.image ? (
+      <img src={prod.image} alt={prod?.name} className="w-full h-full object-fill" />
+    ) : (
+      <div className="w-full h-full bg-gradient-to-r from-[#c21a5b] to-[#571477]/10 flex items-center justify-center shrink-0">
+        <span className="material-symbols-outlined text-[#c21a5b] text-xl">
+          {prod?.icon ||'terminal'}
+        </span>
+      </div>
+    )}
+  </div>
+ <div className="flex-1 min-w-0">
+ <h4 className="font-label-md text-label-md text-on-surface font-bold truncate group-hover:text-[#c21a5b] transition-colors">
+ {prod?.name || lic.productName ||'Bản quyền tool'}
+ </h4>
+ <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+ <span className="font-body-md text-body-md text-secondary text-xs">
+ {lic.plan ==='lifetime' ?'Vĩnh viễn' : `Hạn: ${lic.expiresAt?.toDate?.().toLocaleDateString('vi-VN') ||'N/A'}`}
+ </span>
+ <span className="w-1 h-1 bg-outline-variant rounded-full"></span>
+ <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${status.class}`}>
+ {status.text}
+ </span>
+ </div>
+ </div>
+ <span className="material-symbols-outlined text-outline-variant group-hover:text-[#c21a5b] transition-colors">
+ chevron_right
+ </span>
+ </div>
+ );
+ })}
+ </div>
+ </div>
+
+ </div>
+ )}
+
+ </div>
+ </main>
+ </div>
+ );
 }

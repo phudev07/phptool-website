@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Allow: /products
+Allow: /buy/
+Disallow: /admin/
+Disallow: /dashboard
+Disallow: /wallet
+Disallow: /profile
+Disallow: /my-licenses
+
+Sitemap: https://phptool.site/sitemap.xml

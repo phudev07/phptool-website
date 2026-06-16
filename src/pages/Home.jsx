@@ -1,323 +1,250 @@
-import { useRef } from 'react';
-import { Link } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
-import Navbar from '../components/Layout/Navbar';
-import SEO from '../components/SEO';
-import { 
-  Smartphone, Music, Youtube, Zap, Shield, Clock,
-  RefreshCw, Headphones, Users, Server, Check, ArrowRight,
-  Star, ChevronRight, Gift
-} from 'lucide-react';
-import heroImage from '/hero-visual.png';
-import logoImage from '/logo.png';
-import './Home.css';
-
-// Products Data - Simplified with images
-const PRODUCTS = [
-  {
-    id: 'regfb',
-    name: 'Tool Auto Reg/Very FB LD và Phone',
-    tagline: '⭐ Best Seller',
-    image: '/tool-screenshot.png',
-    status: 'available',
-    color: '#6366F1'
-  },
-  {
-    id: 'clonetk',
-    name: 'Clone TikTok Tool',
-    tagline: '🔜 Sắp ra mắt',
-    image: null,
-    Icon: Music,
-    status: 'coming_soon',
-    color: '#EC4899'
-  },
-  {
-    id: 'seoyt',
-    name: 'YouTube SEO Tool',
-    tagline: '🔜 Sắp ra mắt',
-    image: null,
-    Icon: Youtube,
-    status: 'coming_soon',
-    color: '#F97316'
-  }
-];
-
-// Features Data
-const FEATURES = [
-  { Icon: Zap, title: 'Tốc Độ Cao', desc: 'Xử lý nhanh chóng, tiết kiệm thời gian', color: '#FFDE59' },
-  { Icon: Shield, title: 'Bảo Mật HWID', desc: 'Bind máy tính, chống share key', color: '#22C55E' },
-  { Icon: RefreshCw, title: 'Update Liên Tục', desc: 'Luôn tương thích với Facebook mới nhất', color: '#6366F1' },
-  { Icon: Headphones, title: 'Hỗ Trợ 24/7', desc: 'Đội ngũ support chuyên nghiệp', color: '#EC4899' },
-  { Icon: Server, title: 'Ổn Định 99%', desc: 'Chạy mượt, không lỗi, không lag', color: '#8B5CF6' },
-  { Icon: Clock, title: 'Dùng Thử Free', desc: 'Đăng ký nhận ngay 1 ngày miễn phí', color: '#F97316' }
-];
-
-// Stats Data with icons
-const STATS = [
-  { value: '500+', label: 'Khách hàng', Icon: Users, color: '#6366F1' },
-  { value: '99%', label: 'Uptime', Icon: Server, color: '#22C55E' },
-  { value: '24/7', label: 'Hỗ trợ', Icon: Headphones, color: '#EC4899' },
-  { value: '3+', label: 'Sản phẩm', Icon: Zap, color: '#FFDE59' }
-];
-
-// Testimonials Data - more reviews for slider
-const TESTIMONIALS = [
-  { name: 'Minh T.', content: 'Tool ổn định nhất mình từng dùng. Chạy 24/7 không lỗi!', rating: 5 },
-  { name: 'Hoàng V.', content: 'Giá rẻ, tool ngon, support nhiệt tình. Recommend!', rating: 5 },
-  { name: 'Đức H.', content: 'Reg acc tự động cực nhanh, chạy 100% không lỗi.', rating: 5 },
-  { name: 'Long P.', content: 'Support trả lời nhanh, fix bug trong vài phút.', rating: 5 },
-  { name: 'Tuấn A.', content: 'Tool giúp tiết kiệm hàng giờ làm việc mỗi ngày!', rating: 5 },
-  { name: 'Quang M.', content: 'Giao diện đẹp, dễ sử dụng. Rất chuyên nghiệp!', rating: 5 },
-  { name: 'Kiên T.', content: 'Đã dùng nhiều tool khác nhưng đây là tốt nhất!', rating: 5 },
-  { name: 'Nam N.', content: 'Dịch vụ tốt, giá cả hợp lý. Rất hài lòng!', rating: 5 }
-];
+import { useState, useEffect } from'react';
+import { Link, useLocation } from'react-router-dom';
+import Navbar from'../components/Layout/Navbar';
+import { getProducts } from'../services/productsService';
 
 export default function Home() {
-  const { currentUser } = useAuth();
-  const productsRef = useRef(null);
+ const location = useLocation();
+ const [products, setProducts] = useState([]);
+ const [filterType, setFilterType] = useState('all');
+ const [loading, setLoading] = useState(true);
 
-  const scrollToProducts = (e) => {
-    e.preventDefault();
-    productsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
+ // Load products from Firestore
+ useEffect(() => {
+ async function loadData() {
+ setLoading(true);
+ const data = await getProducts();
+ setProducts(data);
+ setLoading(false);
+ }
+ loadData();
+ }, []);
 
-  function formatMoney(amount) {
-    return new Intl.NumberFormat('vi-VN').format(amount);
+  // Set SEO tags
+  useEffect(() => {
+    document.title = 'PHP-TOOL VIP | Cửa Hàng Phần Mềm Tự Động Hóa MMO';
+    
+    let metaDesc = document.querySelector('meta[name="description"]');
+    if (!metaDesc) {
+      metaDesc = document.createElement('meta');
+      metaDesc.setAttribute('name', 'description');
+      document.head.appendChild(metaDesc);
+    }
+    metaDesc.setAttribute('content', 'Cửa hàng cung cấp các tool MMO chất lượng cao, Auto Reg/Very Facebook LDPlayer & Phone, nuôi tài khoản tự động, bypass checkpoint.');
+  }, []);
+
+ const [searchQuery, setSearchQuery] = useState('');
+
+ // Read URL query parameters for type and search
+ useEffect(() => {
+ const params = new URLSearchParams(location.search);
+ 
+ const type = params.get('type');
+ if (type) {
+ setFilterType(type);
+ } else {
+ setFilterType('all');
+ }
+
+ const search = params.get('search') ||'';
+ setSearchQuery(search);
+ }, [location]);
+
+  // Filter products based on active tab and search query
+  const filteredProducts = products.filter(product => {
+    if (product.hidden) return false;
+
+    const minPrice = getMinPrice(product.plans);
+    const isProductFree = product.type === 'free' || minPrice === 0;
+
+    let matchesTab = false;
+    if (filterType === 'all') {
+      matchesTab = true;
+    } else if (filterType === 'free') {
+      matchesTab = isProductFree;
+    } else {
+      matchesTab = product.type === filterType;
+    }
+
+    const matchesSearch = !searchQuery || 
+      product.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      product.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      product.tagline?.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesTab && matchesSearch;
+  });
+
+ function formatMoney(amount) {
+ if (amount === 0 || !amount) return'Miễn phí';
+ return new Intl.NumberFormat('vi-VN').format(amount) +'đ';
+ }
+
+ function getMinPrice(plans) {
+ if (!plans || Object.keys(plans).length === 0) return 0;
+ const prices = Object.values(plans).map(p => p.price);
+ return Math.min(...prices);
+ }
+
+ function renderBadge(type) {
+  let classes = "";
+  let label = "";
+  
+  switch (type) {
+    case 'php-tool':
+      classes = "bg-gradient-to-r from-[#c21a5b] to-[#571477] text-white font-black shadow-md";
+      label = "PHP-TOOL";
+      break;
+    case 'crack':
+      classes = "bg-[#d32f2f] text-white font-black shadow-md";
+      label = "UNLOCK";
+      break;
+    case 'free':
+      classes = "bg-emerald-600 text-white font-black shadow-md";
+      label = "FREE";
+      break;
+    default:
+      classes = "bg-secondary text-on-secondary font-black shadow-md";
+      label = "TOOL";
+  }
+  
+  return (
+    <span className={`absolute -top-px -left-px z-20 inline-flex items-center px-3 py-1 rounded-br-lg text-[11px] font-bold tracking-wider uppercase ${classes}`}>
+      {label}
+    </span>
+  );
   }
 
-  return (
-    <div className="home-page">
-      <SEO 
-        title="Trang chủ"
-        description="PHP Tool - Cung cấp Tool Reg/Very Facebook tự động hàng loạt. Hỗ trợ Hotmail, SMS, Gmail. Giao diện dễ sử dụng, giá rẻ nhất thị trường."
-        keywords="tool reg fb, tool very fb, reg facebook tự động, xác minh facebook, tool mmo, php tool"
-      />
-      <Navbar />
+ return (
+ <div className="min-h-screen bg-background text-on-background">
+ <Navbar />
 
-      {/* ========== HERO SECTION ========== */}
-      <section className="hero">
-        <div className="hero-bg">
-          <div className="hero-gradient"></div>
-          <div className="hero-grid"></div>
-        </div>
-        
-        <div className="hero-container">
-          <div className="hero-content">
-            <div className="hero-badge">
-              <Zap size={14} />
-              <span>Nền tảng Tools MMO #1 Việt Nam</span>
-            </div>
-            
-            <h1 className="hero-title">
-              <span className="hero-title-line">Công Cụ MMO</span>
-              <span className="hero-title-gradient">Chuyên Nghiệp</span>
-            </h1>
-            
-            <p className="hero-desc">
-              Tự động hóa công việc, tăng năng suất gấp 10 lần. Tool ổn định, 
-              update liên tục, hỗ trợ 24/7.
-            </p>
+ <main className="md:ml-sidebar-width pt-header-height min-h-screen">
+ <div className="max-w-container-max mx-auto p-4 md:p-gutter pb-20">
+ 
+ {/* Header */}
+ <div className="mb-8">
+ <h2 className="font-headline-lg text-headline-lg text-on-surface mb-2">Cửa hàng ứng dụng</h2>
+ <p className="font-body-md text-body-md text-secondary">Khám phá và đăng ký các công cụ hỗ trợ tự động hóa.</p>
+ </div>
 
-            <div className="hero-cta">
-              <a href="#products" onClick={scrollToProducts} className="btn-primary">
-                <span>Xem sản phẩm</span>
-                <ArrowRight size={20} />
-              </a>
-              {!currentUser && (
-                <Link to="/register" className="btn-secondary">
-                  <Gift size={20} />
-                  <span>Dùng thử miễn phí</span>
-                </Link>
-              )}
-            </div>
+ {/* Tabs Filter */}
+ <div className="flex items-center gap-2 mb-8 border-b border-outline-variant pb-px overflow-x-auto">
+ <button 
+ className={`px-4 py-2 border-b-2 font-label-md text-label-md transition-colors whitespace-nowrap ${filterType ==='all' ?'border-[#c21a5b] text-[#c21a5b]' :'border-transparent text-secondary hover:text-[#c21a5b]'}`}
+ onClick={() => setFilterType('all')}
+ >
+ Tất cả
+ </button>
+ <button 
+ className={`px-4 py-2 border-b-2 font-label-md text-label-md transition-colors whitespace-nowrap ${filterType ==='php-tool' ?'border-[#c21a5b] text-[#c21a5b]' :'border-transparent text-secondary hover:text-[#c21a5b]'}`}
+ onClick={() => setFilterType('php-tool')}
+ >
+ Tool của PHP-TOOL
+ </button>
+  <button 
+  className={`px-4 py-2 border-b-2 font-label-md text-label-md transition-colors whitespace-nowrap ${filterType ==='crack' ?'border-[#c21a5b] text-[#c21a5b]' :'border-transparent text-secondary hover:text-[#c21a5b]'}`}
+  onClick={() => setFilterType('crack')}
+  >
+  Tool Mở Khóa
+  </button>
+ <button 
+ className={`px-4 py-2 border-b-2 font-label-md text-label-md transition-colors whitespace-nowrap ${filterType ==='free' ?'border-[#c21a5b] text-[#c21a5b]' :'border-transparent text-secondary hover:text-[#c21a5b]'}`}
+ onClick={() => setFilterType('free')}
+ >
+ Tool Free
+ </button>
+ </div>
 
-            <div className="hero-trust">
-              <div className="hero-avatars">
-                {[...Array(5)].map((_, i) => (
-                  <div key={i} className="hero-avatar">
-                    <Users size={16} />
-                  </div>
-                ))}
-              </div>
-              <div className="hero-trust-text">
-                <strong>500+</strong> người dùng tin tưởng
-              </div>
-            </div>
-          </div>
+ {loading ? (
+ <div className="flex flex-col items-center justify-center py-20">
+ <div className="w-10 h-10 border-4 border-[#c21a5b] border-t-transparent rounded-full animate-spin"></div>
+ <p className="text-secondary mt-4">Đang tải danh sách công cụ...</p>
+ </div>
+ ) : (
+ /* Grid of Cards */
+ <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+ {filteredProducts.length > 0 ? (
+ filteredProducts.map(product => {
+ const minPrice = getMinPrice(product.plans);
+ const isFree = product.type ==='free' || minPrice === 0;
 
-          <div className="hero-visual">
-            <div className="hero-card">
-              <div className="hero-card-header">
-                <div className="hero-card-dot"></div>
-                <div className="hero-card-dot"></div>
-                <div className="hero-card-dot"></div>
-              </div>
-              <img src={heroImage} alt="PHP Tool" className="hero-image" />
-            </div>
-          </div>
-        </div>
-      </section>
+ return (
+ <div key={product.id} className="bg-surface-container-lowest border border-outline-variant rounded-tr-xl rounded-b-xl flex flex-col hover:border-[#c21a5b] hover:shadow-sm transition-all duration-200 group relative">
+ 
+  {/* Badge - flush top-left corner */}
+  {renderBadge(product.type)}
 
-      {/* ========== STATS BAR ========== */}
-      <section className="stats">
-        <div className="stats-container">
-          {STATS.map((stat, idx) => (
-            <div key={idx} className="stat-item" style={{ '--accent': stat.color }}>
-              <div className="stat-icon">
-                <stat.Icon size={24} />
-              </div>
-              <div className="stat-info">
-                <span className="stat-value">{stat.value}</span>
-                <span className="stat-label">{stat.label}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
+ {/* Image block */}
+ <div className="h-48 bg-surface-container relative overflow-hidden border-b border-outline-variant/50 rounded-tr-xl">
+ {product.image ? (
+ <img 
+ alt={product.name} 
+ className="w-full h-full object-fill" 
+ src={product.image}
+ />
+ ) : (
+ <div className="w-full h-full bg-gradient-to-br from-secondary-container to-surface-container flex items-center justify-center overflow-hidden">
+ <span className="material-symbols-outlined text-[64px] text-[#c21a5b]/50">
+ {product.icon ||'terminal'}
+ </span>
+ </div>
+ )}
+ </div>
 
-      {/* ========== PRODUCTS GRID ========== */}
-      <section className="products" id="products" ref={productsRef}>
-        <div className="section-container">
-          <div className="section-header">
-            <span className="section-tag">Sản phẩm</span>
-            <h2>Tools Của Chúng Tôi</h2>
-            <p>Click vào sản phẩm để xem chi tiết và mua</p>
-          </div>
+ {/* Content block */}
+ <div className="p-5 flex flex-col flex-1">
+ <h3 className="font-headline-md text-headline-md text-on-surface mb-1 group-hover:text-[#c21a5b] transition-colors">
+ {product.name}
+ </h3>
+ <p className="font-body-md text-body-md text-secondary line-clamp-2 mb-4">
+ {product.description || product.tagline}
+ </p>
+ 
+ {/* Footer block */}
+ <div className="mt-auto pt-4 border-t border-outline-variant/50 flex items-center justify-between">
+ <div className="flex flex-col justify-center">
+ {isFree ? (
+ <span className="font-headline-md text-headline-md text-[#c21a5b] font-bold">
+ Miễn phí
+ </span>
+ ) : (
+ <span className="font-headline-md text-headline-md text-[#c21a5b] font-bold">
+ {formatMoney(minPrice)}
+ </span>
+ )}
+ </div>
+ <Link 
+ to={`/buy/${product.id}`} 
+ className="relative overflow-hidden bg-gradient-to-r from-[#c21a5b] to-[#571477] text-white hover:opacity-95 font-label-md text-label-md px-6 py-3.5 rounded-xl active:scale-[0.98] transition-all duration-300 text-center font-bold shadow-md group/btn flex items-center justify-center z-10"
+ >
+ <span className="relative z-10">Xem ngay</span>
+ {/* Gloss/Shine Sweep Effect */}
+ <span className="absolute inset-0 w-[60%] h-full bg-gradient-to-r from-transparent via-white/30 to-transparent skew-x-12 -translate-x-[150%] group-hover/btn:translate-x-[200%] transition-transform duration-1000 ease-out z-0"></span>
+ </Link>
+ </div>
+ </div>
 
-          <div className="products-grid">
-            {PRODUCTS.map((product) => (
-              <Link 
-                key={product.id}
-                to={product.status === 'available' ? `/buy/${product.id}` : '#'}
-                className={`product-card ${product.status}`}
-                style={{ '--accent': product.color }}
-                onClick={(e) => product.status !== 'available' && e.preventDefault()}
-              >
-                <div className="product-visual">
-                  {product.image ? (
-                    <img src={product.image} alt={product.name} className="product-image" />
-                  ) : (
-                    <div className="product-icon-placeholder">
-                      <product.Icon size={64} />
-                    </div>
-                  )}
-                </div>
-                <div className="product-info">
-                  <h3>{product.name}</h3>
-                  <span className="product-tagline">{product.tagline}</span>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
-      </section>
+ </div>
+ );
+ })
+ ) : (
+ <div className="col-span-full text-center py-12 bg-surface rounded-xl border border-outline-variant border-dashed">
+ <span className="material-symbols-outlined text-[48px] text-secondary mb-2">
+ {searchQuery ?'search_off' :'inventory_2'}
+ </span>
+ <p className="text-secondary font-body-lg text-body-lg">
+ {searchQuery ? (
+ <>Không tìm thấy công cụ phù hợp với"{searchQuery}"</>
+ ) : (
+ <>Chưa có sản phẩm nào trong danh mục này.</>
+ )}
+ </p>
+ </div>
+ )}
+ </div>
+ )}
 
-      {/* ========== FEATURES GRID ========== */}
-      <section className="features">
-        <div className="section-container">
-          <div className="section-header">
-            <span className="section-tag">Tại sao chọn chúng tôi</span>
-            <h2>Lợi Ích Vượt Trội</h2>
-          </div>
-
-          <div className="features-grid">
-            {FEATURES.map((feature, idx) => (
-              <div key={idx} className="feature-card" style={{ '--accent': feature.color }}>
-                <div className="feature-icon">
-                  <feature.Icon size={24} />
-                </div>
-                <h4>{feature.title}</h4>
-                <p>{feature.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ========== TESTIMONIALS - Infinite Marquee ========== */}
-      <section className="testimonials">
-        <div className="section-container">
-          <div className="section-header">
-            <span className="section-tag">Đánh giá</span>
-            <h2>Khách Hàng Nói Gì?</h2>
-          </div>
-        </div>
-
-        <div className="testimonials-marquee">
-          <div className="testimonials-track">
-            {/* First set */}
-            {TESTIMONIALS.map((t, idx) => (
-              <div key={`a-${idx}`} className="testimonial-card">
-                <div className="testimonial-stars">
-                  {[...Array(t.rating)].map((_, i) => (
-                    <Star key={i} size={14} fill="#FFDE59" color="#FFDE59" />
-                  ))}
-                </div>
-                <p className="testimonial-content">"{t.content}"</p>
-                <div className="testimonial-author">
-                  <div className="testimonial-avatar">
-                    <Users size={16} />
-                  </div>
-                  <span>{t.name}</span>
-                </div>
-              </div>
-            ))}
-            {/* Duplicate set for seamless loop */}
-            {TESTIMONIALS.map((t, idx) => (
-              <div key={`b-${idx}`} className="testimonial-card">
-                <div className="testimonial-stars">
-                  {[...Array(t.rating)].map((_, i) => (
-                    <Star key={i} size={14} fill="#FFDE59" color="#FFDE59" />
-                  ))}
-                </div>
-                <p className="testimonial-content">"{t.content}"</p>
-                <div className="testimonial-author">
-                  <div className="testimonial-avatar">
-                    <Users size={16} />
-                  </div>
-                  <span>{t.name}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ========== CTA SECTION ========== */}
-      <section className="cta">
-        <div className="section-container">
-          <div className="cta-card">
-            <div className="cta-content">
-              <h2>Bắt đầu miễn phí ngay hôm nay!</h2>
-              <p>Đăng ký tài khoản và nhận 1 ngày dùng thử hoàn toàn miễn phí.</p>
-            </div>
-            {currentUser ? (
-              <Link to="/dashboard" className="cta-btn">
-                Vào Dashboard <ArrowRight size={20} />
-              </Link>
-            ) : (
-              <Link to="/register" className="cta-btn">
-                Đăng ký miễn phí <ArrowRight size={20} />
-              </Link>
-            )}
-          </div>
-        </div>
-      </section>
-
-      {/* ========== FOOTER ========== */}
-      <footer className="footer">
-        <div className="footer-container">
-          <div className="footer-brand">
-            <img src={logoImage} alt="PHP Tool" className="footer-logo" />
-            <span>PHP Tool</span>
-          </div>
-          <div className="footer-links">
-            <a href="https://t.me/phptoolvip" target="_blank" rel="noopener noreferrer">Telegram</a>
-            <Link to="/guide">Hướng dẫn</Link>
-          </div>
-          <p className="footer-copy">© 2024 PHP Tool. All rights reserved.</p>
-        </div>
-      </footer>
-    </div>
-  );
+ </div>
+ </main>
+ </div>
+ );
 }

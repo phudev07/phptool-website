@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -8,13 +9,14 @@ import Wallet from './pages/Wallet';
 import MyLicenses from './pages/MyLicenses';
 import Profile from './pages/Profile';
 import BuyLicense from './pages/BuyLicense';
-import Guide from './pages/Guide';
+import AdminDashboard from './pages/admin/Dashboard';
 import AdminUsers from './pages/admin/Users';
 import AdminLicenses from './pages/admin/Licenses';
 import AdminOrders from './pages/admin/Orders';
 import AdminDeposits from './pages/admin/Deposits';
 import AdminStats from './pages/admin/Stats';
 import AdminSettings from './pages/admin/Settings';
+import FallingFlowers from './components/FallingFlowers';
 import './App.css';
 
 // Protected Route Component
@@ -89,9 +91,6 @@ function AppRoutes() {
         </PrivateRoute>
       } />
 
-      <Route path="/guide" element={<Guide />} />
-      <Route path="/guide/:productId" element={<Guide />} />
-
       <Route path="/profile" element={
         <PrivateRoute>
           <Profile />
@@ -99,18 +98,20 @@ function AppRoutes() {
       } />
       
       <Route path="/buy" element={
-        <PrivateRoute>
-          <BuyLicense />
-        </PrivateRoute>
+        <BuyLicense />
       } />
 
       <Route path="/buy/:productId" element={
-        <PrivateRoute>
-          <BuyLicense />
-        </PrivateRoute>
+        <BuyLicense />
       } />
 
       {/* Admin Routes */}
+      <Route path="/admin" element={
+        <PrivateRoute>
+          <AdminDashboard />
+        </PrivateRoute>
+      } />
+
       <Route path="/admin/users" element={
         <PrivateRoute>
           <AdminUsers />
@@ -155,11 +156,14 @@ function AppRoutes() {
 
 function App() {
   return (
-    <Router>
-      <AuthProvider>
-        <AppRoutes />
-      </AuthProvider>
-    </Router>
+    <ThemeProvider>
+      <Router>
+        <AuthProvider>
+          <FallingFlowers />
+          <AppRoutes />
+        </AuthProvider>
+      </Router>
+    </ThemeProvider>
   );
 }
 

@@ -28,17 +28,13 @@ export function AuthProvider({ children }) {
     // Update display name
     await updateProfile(user, { displayName });
 
-    // Tính thời gian hết hạn trial (1 ngày)
-    const trialExpiry = new Date();
-    trialExpiry.setDate(trialExpiry.getDate() + 1);
-
-    // Tạo profile trong Firestore với bonus 10k
+    // Tạo profile trong Firestore
     await setDoc(doc(db, 'users', user.uid), {
       uid: user.uid,
       email: email,
       displayName: displayName,
       role: 'user',
-      balance: 10000, // Bonus đăng ký 10k
+      balance: 0,
       createdAt: serverTimestamp()
     });
 

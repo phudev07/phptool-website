@@ -19,9 +19,9 @@
 
 .auth-card {
   background: linear-gradient(145deg, rgba(30, 30, 48, 0.9), rgba(20, 20, 35, 0.95));
-  border-radius: 24px;
+  border-radius: 6px;
   padding: 2.5rem;
-  box-shadow: 
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05)
     0 25px 50px rgba(0, 0, 0, 0.4),
     0 0 0 1px rgba(255, 255, 255, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
@@ -49,7 +49,7 @@
   font-size: 2rem;
   color: #fff;
   margin-bottom: 0.5rem;
-  background: linear-gradient(90deg, #00d9ff, #00ff88);
+  background: linear-gradient(90deg, #c21a5b, #571477);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -63,7 +63,7 @@
 /* Alert */
 .alert {
   padding: 1rem;
-  border-radius: 12px;
+  border-radius: 6px;
   margin-bottom: 1.5rem;
   font-size: 0.9rem;
 }
@@ -117,7 +117,7 @@
   padding: 0.9rem 1rem 0.9rem 3rem;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
+  border-radius: 6px;
   color: #fff;
   font-size: 1rem;
   transition: all 0.3s ease;
@@ -125,9 +125,9 @@
 
 .input-wrapper input:focus {
   outline: none;
-  border-color: #00d9ff;
-  background: rgba(0, 217, 255, 0.05);
-  box-shadow: 0 0 0 3px rgba(0, 217, 255, 0.1);
+  border-color: #c21a5b;
+  background: rgba(194, 26, 91, 0.05);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
 
 .input-wrapper input::placeholder {
@@ -138,9 +138,9 @@
 .btn-primary {
   width: 100%;
   padding: 1rem;
-  background: linear-gradient(135deg, #00d9ff, #00ff88);
+  background: linear-gradient(135deg, #c21a5b, #571477);
   border: none;
-  border-radius: 12px;
+  border-radius: 6px;
   color: #1a1a2e;
   font-size: 1rem;
   font-weight: 600;
@@ -155,7 +155,7 @@
 
 .btn-primary:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 10px 30px rgba(0, 217, 255, 0.3);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
 
 .btn-primary:disabled {
@@ -166,7 +166,7 @@
 .loading-spinner {
   width: 20px;
   height: 20px;
-  border: 2px solid rgba(26, 26, 46, 0.3);
+  border: 1px solid rgba(26, 26, 46, 0.3);
   border-top-color: #1a1a2e;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -180,7 +180,7 @@
 .btn-forgot {
   background: none;
   border: none;
-  color: #00d9ff;
+  color: #c21a5b;
   font-size: 0.9rem;
   cursor: pointer;
   text-align: right;
@@ -206,7 +206,7 @@
 }
 
 .btn-text:hover {
-  color: #00d9ff;
+  color: #c21a5b;
 }
 
 /* Footer */
@@ -222,7 +222,7 @@
 }
 
 .auth-link {
-  color: #00d9ff;
+  color: #c21a5b;
   text-decoration: none;
   font-weight: 600;
   transition: color 0.3s ease;
@@ -241,9 +241,9 @@
 .free-trial-banner {
   margin-top: 1.5rem;
   padding: 1rem;
-  background: linear-gradient(135deg, rgba(0, 217, 255, 0.1), rgba(0, 255, 136, 0.1));
+  background: linear-gradient(135deg, rgba(194, 26, 91, 0.1), rgba(87, 20, 119, 0.1));
   border: 1px solid rgba(0, 255, 136, 0.2);
-  border-radius: 12px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -290,7 +290,7 @@
 .circle-1 {
   width: 400px;
   height: 400px;
-  background: #00d9ff;
+  background: #c21a5b;
   top: -100px;
   right: -100px;
   animation: float 8s ease-in-out infinite;

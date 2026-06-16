@@ -1,104 +1,107 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { collection, serverTimestamp, doc, increment, writeBatch, getDoc } from 'firebase/firestore';
+import { collection, serverTimestamp, doc, increment, writeBatch, query, where, getDocs, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useAntiSpam } from '../hooks/useAntiSpam';
 import Navbar from '../components/Layout/Navbar';
-import { Check, Download, BookOpen, Shield, Zap, RefreshCw, Headphones, ArrowLeft, CreditCard } from 'lucide-react';
-import './BuyLicense.css';
-
-// Product details with full information
-const PRODUCTS = {
-  'regfb': {
-    name: 'Tool Auto Reg/Very FB LD và Phone',
-    tagline: '⭐ Best Seller',
-    image: '/tool-screenshot.png',
-    description: 'Tool tự động đăng ký và xác minh tài khoản Facebook hàng loạt với tỷ lệ thành công cao nhất thị trường. Hỗ trợ chạy trên LDPlayer và điện thoại thật.',
-    features: [
-      'Đăng ký tài khoản Facebook tự động',
-      'Xác minh qua Hotmail, Gmail, SMS',
-      'Hỗ trợ chạy trên LDPlayer (LD) và điện thoại',
-      'Bind HWID bảo mật cao',
-      'Cập nhật liên tục theo chính sách Facebook',
-      'Hỗ trợ kỹ thuật 24/7'
-    ],
-    highlights: [
-      { icon: Zap, title: 'Tốc độ cao', desc: 'Reg hàng trăm acc/ngày' },
-      { icon: Shield, title: 'Bảo mật HWID', desc: 'Chống share key' },
-      { icon: RefreshCw, title: 'Update liên tục', desc: 'Luôn ổn định' },
-      { icon: Headphones, title: 'Hỗ trợ 24/7', desc: 'Support nhiệt tình' }
-    ],
-    plans: {
-      'daily': { name: 'Theo ngày', price: 10000, days: 0, description: 'Trừ 10k/ngày khi sử dụng' },
-      'monthly': { name: '1 Tháng', price: 200000, days: 30, popular: true },
-      'yearly': { name: '1 Năm', price: 500000, days: 365, save: '58%' },
-      'lifetime': { name: 'Vĩnh viễn', price: 600000, days: -1, best: true }
-    }
-  },
-  'clonetk': {
-    name: 'Clone TikTok Tool',
-    tagline: '🔜 Sắp ra mắt',
-    image: null,
-    description: 'Công cụ clone video TikTok không watermark, quản lý nhiều tài khoản cùng lúc.',
-    features: ['Clone video không logo', 'Multi accounts', 'Auto upload'],
-    highlights: [],
-    comingSoon: true,
-    plans: {}
-  },
-  'seoyt': {
-    name: 'YouTube SEO Tool',
-    tagline: '🔜 Sắp ra mắt',
-    image: null,
-    description: 'Tối ưu SEO video YouTube, nghiên cứu từ khóa và tăng view.',
-    features: ['Keyword research', 'Tag optimizer', 'Analytics'],
-    highlights: [],
-    comingSoon: true,
-    plans: {}
-  }
-};
+import { getProductById } from '../services/productsService';
 
 export default function BuyLicense() {
   const { currentUser, userProfile } = useAuth();
   const navigate = useNavigate();
   const { productId } = useParams();
   
-  const [selectedPlan, setSelectedPlan] = useState('monthly');
-  const [loading, setLoading] = useState(false);
+  const [product, setProduct] = useState(null);
+  const [selectedPlan, setSelectedPlan] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [purchasing, setPurchasing] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [purchaseSuccess, setPurchaseSuccess] = useState(null);
-  const [softwareInfo, setSoftwareInfo] = useState(null);
-  const [showChangelog, setShowChangelog] = useState(false);
+  const [hasLicense, setHasLicense] = useState(false);
 
-  const product = PRODUCTS[productId] || PRODUCTS['regfb'];
-  const plan = product?.plans?.[selectedPlan];
-  const balance = userProfile?.balance || 0;
-  
+  useEffect(() => {
+    async function checkExistingLicense() {
+      if (!currentUser || !productId) {
+        setHasLicense(false);
+        return;
+      }
+      try {
+        // 1. Check licenses collection
+        const q = query(
+          collection(db, 'licenses'),
+          where('userId', '==', currentUser.uid),
+          where('productId', '==', productId),
+          where('status', '==', 'active')
+        );
+        const snap = await getDocs(q);
+        let exists = !snap.empty;
+
+        // 2. Check active_tools collection (for tools without HWID)
+        if (!exists) {
+          const activeToolRef = doc(db, 'users', currentUser.uid, 'active_tools', productId);
+          const activeToolSnap = await getDoc(activeToolRef);
+          if (activeToolSnap.exists() && activeToolSnap.data().active === true) {
+            exists = true;
+          }
+        }
+
+        setHasLicense(exists);
+      } catch (error) {
+        console.error("Error checking existing license:", error);
+      }
+    }
+    checkExistingLicense();
+  }, [currentUser, productId]);
+
   const { validateSubmission, recordAttempt } = useAntiSpam({
     maxAttempts: 3,
     windowMs: 3600000,
     cooldownMs: 3600000
   });
 
+  // Fetch product from Firestore
   useEffect(() => {
-    async function fetchSoftwareInfo() {
-      try {
-        const docRef = doc(db, 'settings', 'software');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setSoftwareInfo(docSnap.data());
-        } else {
-          setSoftwareInfo({});
+    async function loadProduct() {
+      setLoading(true);
+      const targetId = productId || 'regfb';
+      const data = await getProductById(targetId);
+      if (data) {
+        setProduct(data);
+        if (data.plans && Object.keys(data.plans).length > 0) {
+          // Select default plan (usually monthly or the first one)
+          const keys = Object.keys(data.plans);
+          const defaultKey = keys.find(k => k === 'monthly') || keys[0];
+          setSelectedPlan(defaultKey);
         }
-      } catch (error) {
-        console.error('Error fetching software info:', error);
       }
+      setLoading(false);
     }
-    fetchSoftwareInfo();
-  }, []);
+    loadProduct();
+  }, [productId]);
+
+  // Dynamic SEO page title and meta description
+  useEffect(() => {
+    if (product) {
+      document.title = `${product.name} - ${product.tagline} | PHP-TOOL VIP`;
+      
+      let metaDesc = document.querySelector('meta[name="description"]');
+      if (!metaDesc) {
+        metaDesc = document.createElement('meta');
+        metaDesc.setAttribute('name', 'description');
+        document.head.appendChild(metaDesc);
+      }
+      metaDesc.setAttribute('content', `${product.description || product.tagline || 'Mua bản quyền phần mềm tự động hóa siêu tốc.'}`);
+    } else {
+      document.title = 'Mua Bản Quyền Tool | PHP-TOOL VIP';
+    }
+  }, [product]);
+
+  const plan = product?.plans?.[selectedPlan];
+  const balance = userProfile?.balance || 0;
 
   function formatMoney(amount) {
-    return new Intl.NumberFormat('vi-VN').format(amount);
+    if (amount === 0 || !amount) return 'Miễn phí';
+    return new Intl.NumberFormat('vi-VN').format(amount) + 'đ';
   }
 
   function generateLicenseKey() {
@@ -114,7 +117,7 @@ export default function BuyLicense() {
   }
 
   function getExpiryDate(days) {
-    if (days <= 0) return null;
+    if (days <= 0 || days > 30000) return null; // Lifetime
     const date = new Date();
     date.setDate(date.getDate() + days);
     return date;
@@ -126,13 +129,10 @@ export default function BuyLicense() {
       return;
     }
 
-    if (product.comingSoon) {
-      alert('Sản phẩm này sắp ra mắt!');
-      return;
-    }
+    if (!plan || !product) return;
 
     if (balance < plan.price) {
-      alert('Số dư không đủ! Vui lòng nạp thêm tiền.');
+      alert('Số dư tài khoản không đủ! Vui lòng nạp thêm tiền.');
       navigate('/wallet');
       return;
     }
@@ -144,7 +144,7 @@ export default function BuyLicense() {
     }
     recordAttempt();
 
-    setLoading(true);
+    setPurchasing(true);
 
     try {
       const licenseKey = generateLicenseKey();
@@ -157,325 +157,303 @@ export default function BuyLicense() {
         expiryDate = getExpiryDate(plan.days);
       }
 
-      // Use WriteBatch instead of multiple addDoc/updateDoc
       const batch = writeBatch(db);
 
-      // 1. Create license doc
-      const licenseRef = doc(collection(db, 'licenses'));
-      batch.set(licenseRef, {
-        userId: currentUser.uid,
-        userEmail: currentUser.email,
-        productId: productId || 'regfb',
-        licenseKey: licenseKey,
-        plan: selectedPlan,
-        planName: plan.name,
-        price: plan.price,
-        status: 'active',
-        hwid: null,
-        expiresAt: expiryDate,
-        createdAt: serverTimestamp()
-      });
+      // 1. Create license doc (only if HWID is required)
+      let licenseRef = null;
+      if (product.requireHwid !== false) {
+        licenseRef = doc(collection(db, 'licenses'));
+        batch.set(licenseRef, {
+          userId: currentUser.uid,
+          userEmail: currentUser.email,
+          productId: product.id,
+          productName: product.name,
+          licenseKey: licenseKey,
+          plan: selectedPlan,
+          planName: plan.name,
+          price: plan.price,
+          status: 'active',
+          hwid: null,
+          hwidHistory: [],
+          expiresAt: expiryDate,
+          createdAt: serverTimestamp()
+        });
+      }
 
       // 2. Update user balance
-      const userRef = doc(db, 'users', currentUser.uid);
-      batch.update(userRef, {
-        balance: increment(-plan.price)
-      });
+      if (plan.price > 0) {
+        const userRef = doc(db, 'users', currentUser.uid);
+        batch.update(userRef, {
+          balance: increment(-plan.price)
+        });
+      }
 
-      // 3. Create transaction record
+      // 3. Create transaction record (even for free purchases)
       const transactionRef = doc(collection(db, 'transactions'));
       batch.set(transactionRef, {
         userId: currentUser.uid,
         type: 'license_purchase',
         amount: -plan.price,
-        productId: productId || 'regfb',
+        productId: product.id,
         description: `Mua ${product.name} - ${plan.name}`,
         createdAt: serverTimestamp()
       });
 
-      // Commit all operations atomically
+      // 4. Update active tools for download link security check
+      const activeToolRef = doc(db, 'users', currentUser.uid, 'active_tools', product.id);
+      if (product.requireHwid !== false) {
+        batch.set(activeToolRef, { 
+          active: true, 
+          licenseId: licenseRef.id, 
+          updatedAt: serverTimestamp() 
+        });
+      } else {
+        batch.set(activeToolRef, { 
+          active: true, 
+          plan: selectedPlan, 
+          updatedAt: serverTimestamp() 
+        });
+      }
+
       await batch.commit();
 
-      setPurchaseSuccess({
-        product: product.name,
-        plan: plan.name,
-        licenseKey: licenseKey,
-        expiresAt: expiryDate
-      });
-
-      setShowConfirm(false);
-
+      // Immediately redirect user to management tab
+      navigate('/my-licenses');
     } catch (error) {
-      console.error('Error purchasing license:', error);
-      if (error.code === 'permission-denied') {
-        alert('Giao dịch thất bại: Số dư không đủ!');
-      } else {
-        alert('Lỗi: ' + error.message);
-      }
+      console.error('Purchase transaction failed:', error);
+      alert('Giao dịch thất bại: ' + error.message);
     }
-
-    setLoading(false);
+    setPurchasing(false);
   }
 
-  function copyLicenseKey() {
-    if (purchaseSuccess?.licenseKey) {
-      navigator.clipboard.writeText(purchaseSuccess.licenseKey);
-      alert('Đã copy license key!');
-    }
-  }
-
-  // Success screen
-  if (purchaseSuccess) {
+  if (loading) {
     return (
-      <div className="product-page">
+      <div className="min-h-screen bg-background text-on-background">
         <Navbar />
-        <div className="product-container">
-          <div className="success-card">
-            <div className="success-icon">✅</div>
-            <h1>Mua License Thành Công!</h1>
-            <p>Cảm ơn bạn đã mua {purchaseSuccess.product}</p>
-
-            <div className="license-display">
-              <label>License Key của bạn:</label>
-              <div className="license-key">
-                <code>{purchaseSuccess.licenseKey}</code>
-                <button onClick={copyLicenseKey} className="btn-copy">📋 Copy</button>
-              </div>
-            </div>
-
-            <div className="purchase-info">
-              <div className="info-row">
-                <span>Sản phẩm:</span>
-                <span>{purchaseSuccess.product}</span>
-              </div>
-              <div className="info-row">
-                <span>Gói:</span>
-                <span>{purchaseSuccess.plan}</span>
-              </div>
-              {purchaseSuccess.expiresAt && (
-                <div className="info-row">
-                  <span>Hết hạn:</span>
-                  <span>{purchaseSuccess.expiresAt.toLocaleDateString('vi-VN')}</span>
-                </div>
-              )}
-            </div>
-
-            <div className="success-actions">
-              <Link to="/my-licenses" className="btn-primary">
-                Quản lý License
-              </Link>
-              <Link to="/dashboard" className="btn-secondary">
-                Về Dashboard
-              </Link>
-            </div>
+        <main className="md:ml-sidebar-width pt-header-height min-h-screen flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-10 h-10 border-4 border-[#c21a5b] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-secondary">Đang tải cấu hình sản phẩm...</p>
           </div>
-        </div>
+        </main>
       </div>
     );
   }
 
-  // Coming soon
-  if (product.comingSoon) {
+  if (!product) {
     return (
-      <div className="product-page">
+      <div className="min-h-screen bg-background text-on-background">
         <Navbar />
-        <div className="product-container">
-          <Link to="/dashboard" className="back-btn">
-            <ArrowLeft size={20} /> Quay lại
-          </Link>
-          <div className="coming-soon-card">
-            <h1>{product.name}</h1>
-            <p>{product.tagline}</p>
-            <p className="coming-desc">{product.description}</p>
-            <button className="btn-notify" disabled>🔔 Thông báo khi ra mắt</button>
+        <main className="md:ml-sidebar-width pt-header-height min-h-screen p-4 md:p-gutter flex items-center justify-center">
+          <div className="text-center">
+            <span className="material-symbols-outlined text-5xl text-error mb-2">error</span>
+            <h2 className="text-xl font-bold">Không tìm thấy sản phẩm</h2>
+            <Link to="/" className="text-[#c21a5b] hover:underline mt-2 inline-block">Quay lại cửa hàng</Link>
           </div>
-        </div>
+        </main>
       </div>
     );
   }
 
   return (
-    <div className="product-page">
+    <div className="min-h-screen bg-background text-on-background">
       <Navbar />
 
-      <div className="product-container">
-        <Link to="/dashboard" className="back-btn">
-          <ArrowLeft size={20} /> Quay lại
-        </Link>
-
-        {/* Product Hero */}
-        <div className="product-hero">
-          <div className="product-hero-image">
-            {product.image ? (
-              <img src={product.image} alt={product.name} />
-            ) : (
-              <div className="placeholder-image">
-                <Download size={64} />
-              </div>
-            )}
+      <main className="md:ml-sidebar-width pt-header-height min-h-screen">
+        <div className="max-w-container-max mx-auto p-4 md:p-gutter pb-20">
+          
+          {/* Breadcrumb / Back Link */}
+          <div className="mb-6">
+            <Link to="/" className="inline-flex items-center gap-1.5 text-secondary hover:text-[#c21a5b] transition-colors font-label-md text-label-md">
+              <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+              Quay lại cửa hàng
+            </Link>
           </div>
-          <div className="product-hero-info">
-            <span className="product-tagline">{product.tagline}</span>
-            <h1>{product.name}</h1>
-            <p className="product-desc">{product.description}</p>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             
-            {/* Version Display */}
-            {softwareInfo?.version && (
-              <div className="version-wrapper">
-                <button 
-                  className="product-version" 
-                  onClick={() => setShowChangelog(!showChangelog)}
-                >
-                  <span>📦 Version: <strong>{softwareInfo.version}</strong></span>
-                  <span className={`version-arrow ${showChangelog ? 'open' : ''}`}>▼</span>
-                </button>
-                {showChangelog && softwareInfo.changelog && (
-                  <div className="changelog-panel">
-                    <h4>📋 Changelog</h4>
-                    <pre>{softwareInfo.changelog}</pre>
+            {/* Left Column: Product Info */}
+            <div className="lg:col-span-8 space-y-6">
+              <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-6 shadow-sm">
+                
+                {/* Header */}
+                <div className="flex items-center gap-4 pb-6 border-b border-outline-variant/60 mb-6">
+                  <div className="w-16 h-16 rounded-lg overflow-hidden flex items-center justify-center shrink-0 border border-outline-variant bg-surface-container">
+                    {product.image ? (
+                      <img src={product.image} alt={product.name} className="w-full h-full object-fill" />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-r from-[#c21a5b] to-[#571477] text-white flex items-center justify-center">
+                        <span className="material-symbols-outlined text-3xl">
+                          {product.icon || 'terminal'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <h2 className="font-headline-lg text-headline-lg text-on-surface font-bold">
+                      {product.name}
+                    </h2>
+                    <p className="text-secondary mt-1">{product.tagline}</p>
+                  </div>
+                </div>
+
+                {/* Tool Image */}
+                {product.image && (
+                  <div className="h-80 md:h-[480px] bg-surface-container rounded-xl overflow-hidden border border-outline-variant/50 mb-6">
+                    <img 
+                      src={product.image} 
+                      alt={product.name} 
+                      className="w-full h-full object-fill"
+                    />
                   </div>
                 )}
-              </div>
-            )}
-            
-            {/* Quick Actions for owners */}
-            <div className="product-quick-actions">
-              <a 
-                href={softwareInfo?.downloadUrl || '#'} 
-                target={softwareInfo?.downloadUrl ? "_blank" : "_self"} 
-                rel="noopener noreferrer" 
-                className="action-link"
-                onClick={(e) => {
-                  if (!softwareInfo?.downloadUrl) {
-                    e.preventDefault();
-                    alert('Chưa có link tải phần mềm. Vui lòng cài đặt trong trang Admin!');
-                  }
-                }}
-              >
-                <Download size={18} /> Tải phần mềm
-              </a>
-              <Link to={`/guide/${productId || 'regfb'}`} className="action-link">
-                <BookOpen size={18} /> Hướng dẫn sử dụng
-              </Link>
-            </div>
-          </div>
-        </div>
 
-        {/* Features */}
-        <div className="product-section">
-          <h2>Tính năng chính</h2>
-          <ul className="feature-list">
-            {product.features.map((feature, idx) => (
-              <li key={idx}>
-                <Check size={18} className="check-icon" />
-                <span>{feature}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {/* Highlights */}
-        {product.highlights?.length > 0 && (
-          <div className="product-section">
-            <h2>Tại sao chọn tool này?</h2>
-            <div className="highlights-grid">
-              {product.highlights.map((h, idx) => (
-                <div key={idx} className="highlight-card">
-                  <h.icon size={28} className="highlight-icon" />
-                  <h4>{h.title}</h4>
-                  <p>{h.desc}</p>
+                {/* Description */}
+                <div className="space-y-4">
+                  <h3 className="font-label-md text-label-md text-on-surface uppercase tracking-wider">Mô Tả Sản Phẩm</h3>
+                  <p className="font-body-lg text-body-lg text-on-surface-variant leading-relaxed">
+                    {product.description}
+                  </p>
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
 
-        {/* Pricing */}
-        <div className="product-section pricing">
-          <h2>Chọn gói License</h2>
-          <p className="section-subtitle">Số dư hiện tại: <strong>{formatMoney(balance)}đ</strong></p>
-          
-          <div className="pricing-grid">
-            {Object.entries(product.plans).map(([key, planItem]) => (
-              <div 
-                key={key}
-                className={`pricing-card ${selectedPlan === key ? 'selected' : ''} ${planItem.popular ? 'popular' : ''} ${planItem.best ? 'best' : ''}`}
-                onClick={() => setSelectedPlan(key)}
-              >
-                {planItem.popular && <div className="badge popular-badge">Phổ biến</div>}
-                {planItem.best && <div className="badge best-badge">Tốt nhất</div>}
-                {planItem.save && <div className="badge save-badge">Tiết kiệm {planItem.save}</div>}
+                {/* Features list */}
+                {product.features && product.features.length > 0 && (
+                  <div className="mt-8">
+                    <h3 className="font-label-md text-label-md text-on-surface uppercase tracking-wider mb-4">Tính năng nổi bật</h3>
+                    <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {product.features.map((feat, index) => (
+                        <li key={index} className="flex items-start gap-2 text-on-surface-variant">
+                          <span className="material-symbols-outlined text-emerald-600 shrink-0 text-[18px]" style={{fontVariationSettings: "'FILL' 1"}}>check_circle</span>
+                          <span className="font-body-md text-body-md">{feat}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Video Tutorial */}
+                {product.videoTutorial && (
+                  <div className="mt-8 pt-6 border-t border-outline-variant/60">
+                    <h3 className="font-label-md text-label-md text-on-surface uppercase tracking-wider mb-4">Video Hướng Dẫn Sử Dụng</h3>
+                    <div className="aspect-video w-full rounded-xl overflow-hidden border border-outline-variant bg-surface-container shadow-inner">
+                      <iframe 
+                        src={product.videoTutorial} 
+                        title="YouTube video player" 
+                        className="w-full h-full border-none"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                        allowFullScreen
+                      />
+                    </div>
+                  </div>
+                )}
+
+              </div>
+            </div>
+
+            {/* Right Column: Checkout Card */}
+            <div className="lg:col-span-4">
+              <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-6 shadow-sm sticky top-[96px]">
+                <h3 className="font-headline-md text-headline-md text-on-surface font-bold mb-6">Đăng ký bản quyền</h3>
                 
-                <h3>{planItem.name}</h3>
-                <div className="pricing-amount">
-                  <span className="price">{formatMoney(planItem.price)}</span>
-                  <span className="currency">đ</span>
-                </div>
-                {planItem.description && <p className="pricing-desc">{planItem.description}</p>}
-                
-                <ul className="pricing-features">
-                  <li><Check size={14} /> Toàn bộ tính năng</li>
-                  <li><Check size={14} /> Hỗ trợ 24/7</li>
-                  <li><Check size={14} /> Cập nhật miễn phí</li>
-                  {key === 'lifetime' && <li><Check size={14} /> Không giới hạn thời gian</li>}
-                </ul>
+                {/* Plans Selection */}
+                {product.plans && Object.keys(product.plans).length > 0 ? (
+                  <div className="space-y-4 mb-6">
+                    <label className="block font-label-md text-label-md text-secondary uppercase tracking-wider">Chọn Gói Sử Dụng</label>
+                    <div className="flex flex-col gap-2">
+                      {Object.entries(product.plans).map(([key, p]) => (
+                        <button
+                          key={key}
+                          type="button"
+                          className={`w-full text-left p-4 rounded-lg border transition-all flex justify-between items-center ${selectedPlan === key ? 'border-[#c21a5b] bg-gradient-to-r from-[#c21a5b]/10 to-[#571477]/10' : 'border-outline-variant hover:bg-surface-container/50'}`}
+                          onClick={() => setSelectedPlan(key)}
+                        >
+                          <div>
+                            <div className={`font-label-md text-label-md font-bold ${selectedPlan === key ? 'text-[#c21a5b]' : 'text-on-surface'}`}>{p.name}</div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <span className="font-headline-md text-headline-md font-bold text-[#c21a5b]">
+                              {formatMoney(p.price)}
+                            </span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-error mb-4">Tool này hiện chưa có bảng giá!</p>
+                )}
 
-                <div className="pricing-select">
-                  {selectedPlan === key ? '✓ Đã chọn' : 'Chọn gói này'}
+                {/* User Balance */}
+                <div className="bg-surface-container-low border border-outline-variant rounded-lg p-4 mb-6 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-secondary font-body-md text-body-md">Số dư khả dụng:</span>
+                    <span className="font-bold text-on-surface">{formatMoney(balance)}</span>
+                  </div>
+                  {plan && (
+                    <div className="flex justify-between items-center pt-2 border-t border-outline-variant/60">
+                      <span className="text-secondary font-body-md text-body-md">Thành tiền:</span>
+                      <span className="font-bold text-[#c21a5b] text-lg">{formatMoney(plan.price)}</span>
+                    </div>
+                  )}
                 </div>
+
+                {product?.requireHwid === false && hasLicense ? (
+                  <Link
+                    to={`/my-licenses?productId=${product.id}`}
+                    className="w-full bg-gradient-to-r from-[#c21a5b] to-[#571477] text-white font-label-md text-label-md py-3 rounded-lg hover:opacity-95 transition-all flex items-center justify-center gap-2 font-bold shadow-sm text-center"
+                  >
+                    <span className="material-symbols-outlined">settings_suggest</span>
+                    Quản lý Tool
+                  </Link>
+                ) : plan ? (
+                  !currentUser ? (
+                    <Link
+                      to="/login"
+                      className="w-full bg-gradient-to-r from-[#c21a5b] to-[#571477] text-white font-label-md text-label-md py-3 rounded-lg hover:opacity-95 transition-all flex items-center justify-center gap-2 font-bold shadow-sm text-center"
+                    >
+                      <span className="material-symbols-outlined">login</span>
+                      Đăng nhập để đăng ký
+                    </Link>
+                  ) : balance >= plan.price ? (
+                    <button
+                      type="button"
+                      disabled={purchasing}
+                      onClick={handlePurchase}
+                      className="w-full bg-gradient-to-r from-[#c21a5b] to-[#571477] text-white font-label-md text-label-md py-3 rounded-lg hover:bg-on-primary-fixed-variant transition-colors flex items-center justify-center gap-2 font-bold shadow-sm"
+                    >
+                      {purchasing ? (
+                        <>
+                          <div className="w-5 h-5 border-2 border-on-primary border-t-transparent rounded-full animate-spin"></div>
+                          Đang xử lý giao dịch...
+                        </>
+                      ) : (
+                        <>
+                          <span className="material-symbols-outlined">shopping_cart</span>
+                          Thanh Toán Ngay
+                        </>
+                      )}
+                    </button>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="text-error text-center text-xs font-medium">Số dư khả dụng không đủ để thanh toán gói này.</div>
+                      <Link
+                        to="/wallet"
+                        className="w-full bg-gradient-to-r from-[#c21a5b] to-[#571477] text-white font-label-md text-label-md py-3 rounded-lg hover:bg-on-primary-fixed-variant transition-colors flex items-center justify-center gap-2 font-bold shadow-sm text-center"
+                      >
+                        <span className="material-symbols-outlined">account_balance_wallet</span>
+                        Nạp tiền ngay
+                      </Link>
+                    </div>
+                  )
+                ) : null}
+
               </div>
-            ))}
+            </div>
+
           </div>
 
-          {/* Checkout */}
-          <div className="checkout-bar">
-            <div className="checkout-info">
-              <span>Tổng thanh toán:</span>
-              <span className="checkout-total">{formatMoney(plan?.price || 0)}đ</span>
-            </div>
-            <button 
-              className="btn-checkout"
-              onClick={() => setShowConfirm(true)}
-              disabled={loading || balance < (plan?.price || 0)}
-            >
-              {balance < (plan?.price || 0) ? (
-                <>Nạp thêm tiền</>
-              ) : (
-                <><CreditCard size={20} /> Mua ngay</>
-              )}
-            </button>
-          </div>
-
-          {balance < (plan?.price || 0) && (
-            <div className="insufficient-notice">
-              ⚠️ Số dư không đủ. <Link to="/wallet">Nạp thêm {formatMoney((plan?.price || 0) - balance)}đ</Link>
-            </div>
-          )}
         </div>
-
-        {/* Confirm Modal */}
-        {showConfirm && (
-          <div className="modal-overlay" onClick={() => setShowConfirm(false)}>
-            <div className="modal-content" onClick={e => e.stopPropagation()}>
-              <h2>Xác nhận mua hàng</h2>
-              <div className="confirm-details">
-                <p><strong>Sản phẩm:</strong> {product.name}</p>
-                <p><strong>Gói:</strong> {plan.name}</p>
-                <p><strong>Giá:</strong> {formatMoney(plan.price)}đ</p>
-                <p><strong>Số dư sau khi mua:</strong> {formatMoney(balance - plan.price)}đ</p>
-              </div>
-              <div className="modal-actions">
-                <button className="btn-cancel" onClick={() => setShowConfirm(false)}>
-                  Hủy
-                </button>
-                <button className="btn-confirm" onClick={handlePurchase} disabled={loading}>
-                  {loading ? 'Đang xử lý...' : 'Xác nhận mua'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+      </main>
     </div>
   );
 }

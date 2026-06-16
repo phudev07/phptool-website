@@ -9,11 +9,22 @@
 
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-  background: #0f0f1a;
-  color: #fff;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Main Layout Wrapper */
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 992px) {
+  #root {
+    padding-top: 60px; /* Space for mobile top bar */
+  }
 }
 
 /* Loading Page */
@@ -22,7 +33,6 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
 }
 
 .loading-content {
@@ -32,8 +42,8 @@ body {
 .loading-spinner {
   width: 50px;
   height: 50px;
-  border: 3px solid rgba(255, 255, 255, 0.1);
-  border-top-color: #00d9ff;
+  border: 1px solid var(--color-outline-variant);
+  border-top-color: #c21a5b;
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin: 0 auto 1rem;
@@ -44,37 +54,18 @@ body {
 }
 
 .loading-content p {
-  color: rgba(255, 255, 255, 0.6);
-}
-
-/* Scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.05);
-}
-
-::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
+  color: var(--color-on-surface-variant);
 }
 
 /* Selection */
 ::selection {
-  background: rgba(0, 217, 255, 0.3);
-  color: #fff;
+  background: rgba(194, 26, 91, 0.3);
+  color: inherit;
 }
 
 /* Focus outline */
 :focus-visible {
-  outline: 2px solid #00d9ff;
+  outline: 2px solid #c21a5b;
   outline-offset: 2px;
 }
 
@@ -92,8 +83,62 @@ button {
 
 /* Utility classes */
 .text-gradient {
-  background: linear-gradient(90deg, #00d9ff, #00ff88);
+  background: linear-gradient(90deg, #c21a5b, #571477);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+.animate-charcter {
+  text-transform: uppercase;
+  background-image: linear-gradient(-225deg, #231557 0%, #44107a 29%, #ff1361 67%, #fff800 100%);
+  background-size: 200% auto;
+  color: #fff;
+  background-clip: text;
+  text-fill-color: transparent;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: textclip 2s linear infinite;
+  display: inline-block;
+}
+
+@keyframes textclip {
+  to {
+    background-position: 200% center;
+  }
+}
+
+/* Glassmorphism search input styling */
+.glass-search-input {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  color: var(--color-on-surface) !important;
+}
+
+.glass-search-input:hover {
+  background-color: rgba(255, 255, 255, 0.15) !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+}
+
+.glass-search-input:focus {
+  background-color: rgba(255, 255, 255, 0.22) !important;
+  border-color: rgba(194, 26, 91, 0.4) !important;
+}
+
+.dark .glass-search-input {
+  background-color: rgba(0, 0, 0, 0.2) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: var(--color-on-surface) !important;
+}
+
+.dark .glass-search-input:hover {
+  background-color: rgba(0, 0, 0, 0.28) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+.dark .glass-search-input:focus {
+  background-color: rgba(0, 0, 0, 0.35) !important;
+  border-color: rgba(194, 26, 91, 0.5) !important;
 }

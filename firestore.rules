@@ -1,0 +1,152 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Hàm hỗ trợ kiểm tra xem User hiện tại có phải Admin không
+    function isAdmin() {
+      return request.auth != null && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // ==========================================
+    // BẢO MẬT BẢNG USERS (Thông tin thành viên)
+    // ==========================================
+    match /users/{userId} {
+      // Cho phép Admin đọc/ghi tất cả
+      allow read, write: if isAdmin();
+      
+      // Cho phép người dùng đọc thông tin cá nhân của chính mình
+      allow read: if request.auth != null && request.auth.uid == userId;
+      
+      // Cho phép người dùng đăng ký tài khoản (khởi tạo balance = 0 và role = user)
+      allow create: if request.auth != null && 
+                    request.auth.uid == userId && 
+                    request.resource.data.balance == 0 && 
+                    request.resource.data.role == 'user';
+                    
+      // Cho phép người dùng cập nhật thông tin (avatar, tên...) nhưng:
+      // 1. CẤM tự ý đổi quyền 'role' thành admin.
+      // 2. CẤM tự ý tăng tiền 'balance' (chỉ cho phép số tiền sau cập nhật nhỏ hơn số tiền trước cập nhật - tức là chỉ được tiêu tiền)
+      allow update: if request.auth != null && 
+                    request.auth.uid == userId && 
+                    !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']) &&
+                    (
+                      !request.resource.data.diff(resource.data).affectedKeys().hasAny(['balance']) ||
+                      request.resource.data.balance < resource.data.balance
+                    );
+    }
+
+    // ==========================================
+    // BẢO MẬT BẢNG ACTIVE_TOOLS (Liên kết sở hữu sản phẩm)
+    // ==========================================
+    match /users/{userId}/active_tools/{productId} {
+      allow read, write: if isAdmin();
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow create, update: if request.auth != null && 
+                            request.auth.uid == userId && 
+                            (
+                              // Trường hợp 1: Có license (Tool yêu cầu HWID)
+                              (
+                                request.resource.data.licenseId != null &&
+                                getAfter(/databases/$(database)/documents/licenses/$(request.resource.data.licenseId)).data.userId == request.auth.uid &&
+                                getAfter(/databases/$(database)/documents/licenses/$(request.resource.data.licenseId)).data.productId == productId &&
+                                getAfter(/databases/$(database)/documents/licenses/$(request.resource.data.licenseId)).data.status == 'active'
+                              ) ||
+                              // Trường hợp 2: Không yêu cầu HWID (Mua link tải trực tiếp)
+                              (
+                                get(/databases/$(database)/documents/products/$(productId)).data.requireHwid == false &&
+                                request.resource.data.plan != null &&
+                                getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.balance == 
+                                get(/databases/$(database)/documents/users/$(request.auth.uid)).data.balance - 
+                                get(/databases/$(database)/documents/products/$(productId)).data.plans[request.resource.data.plan].price
+                              )
+                            );
+    }
+
+    // ==========================================
+    // BẢO MẬT BẢNG LICENSES (Key bản quyền)
+    // ==========================================
+    match /licenses/{licenseId} {
+      // Cho phép Admin toàn quyền
+      allow read, write: if isAdmin();
+      
+      // Cho phép người dùng đọc danh sách bản quyền của mình
+      // Hoặc client tool đọc để check bản quyền dựa trên HWID
+      allow read: if (request.auth != null && resource.data.userId == request.auth.uid) ||
+                    (resource.data.hwid != null);
+      
+      // Cho phép người dùng tự tạo bản quyền khi mua hàng, với điều kiện:
+      // 1. Bản quyền phải đăng ký đúng UID của họ.
+      // 2. Số dư (balance) tài khoản của họ sau giao dịch PHẢI giảm đi một lượng chính xác bằng giá tiền bản quyền (price).
+      allow create: if request.auth != null && 
+                    request.resource.data.userId == request.auth.uid &&
+                    getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.balance == 
+                    get(/databases/$(database)/documents/users/$(request.auth.uid)).data.balance - request.resource.data.price;
+                    
+      // Cho phép người dùng cập nhật bản quyền của chính mình (nhưng CẤM thay đổi hạn dùng, loại gói, hay trạng thái. Chỉ cho phép đổi trường HWID)
+      allow update: if request.auth != null && 
+                    resource.data.userId == request.auth.uid && 
+                    request.resource.data.plan == resource.data.plan &&
+                    request.resource.data.expiresAt == resource.data.expiresAt &&
+                    request.resource.data.productId == resource.data.productId &&
+                    request.resource.data.userId == resource.data.userId &&
+                    request.resource.data.licenseKey == resource.data.licenseKey &&
+                    request.resource.data.price == resource.data.price &&
+                    (
+                      request.resource.data.status == resource.data.status ||
+                      (resource.data.status == 'pending' && request.resource.data.status == 'active')
+                    );
+    }
+
+    // ==========================================
+    // BẢO MẬT BẢNG TRANSACTIONS & DEPOSITS (Lịch sử)
+    // ==========================================
+    match /transactions/{transactionId} {
+      allow read, write: if isAdmin();
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      // Cho phép tự ghi log giao dịch khi mua hàng
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+    }
+    
+    match /deposits/{depositId} {
+      allow read, write: if isAdmin();
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      // Cho phép tạo yêu cầu nạp tiền pending
+      allow create: if request.auth != null && 
+                    request.resource.data.userId == request.auth.uid && 
+                    request.resource.data.status == 'pending';
+    }
+
+    // ==========================================
+    // BẢO MẬT BẢNG USAGE_LOGS (Nhật ký chạy tool)
+    // ==========================================
+    match /usage_logs/{logId} {
+      // Chỉ Admin mới được quyền xem danh sách và xóa logs
+      allow read, delete, update: if isAdmin();
+      
+      // Cho phép tạo log mới từ xa (Để tool Python chạy từ máy người dùng gửi log về lưu trữ)
+      allow create: if true;
+    }
+
+    // ==========================================
+    // BẢO MẬT BẢNG SETTINGS (Cấu hình hệ thống)
+    // ==========================================
+    match /settings/{document} {
+      allow read: if true; // Ai cũng có thể xem phiên bản tool, changelog
+      allow write: if isAdmin(); // Chỉ admin được cấu hình
+    }
+    
+    // Bảng products (Danh sách các gói tool bán trên Store)
+    match /products/{productId} {
+      allow read: if true; // Ai cũng xem được danh sách tool bán
+      allow write: if isAdmin();
+    }
+
+    // Bảng products_secure (Đường dẫn tải ẩn bảo mật)
+    match /products_secure/{productId} {
+      allow write: if isAdmin();
+      allow read: if request.auth != null && 
+                    exists(/databases/$(database)/documents/users/$(request.auth.uid)/active_tools/$(productId));
+    }
+  }
+}

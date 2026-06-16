@@ -67,9 +67,8 @@ export default function Register() {
       <div className="auth-container">
         <div className="auth-card">
           <div className="auth-header">
-            <div className="auth-icon">✨</div>
             <h1>Đăng Ký</h1>
-            <p>Tạo tài khoản và nhận 1 ngày dùng thử miễn phí!</p>
+            <p>Tạo tài khoản mới để bắt đầu sử dụng dịch vụ của chúng tôi.</p>
           </div>
 
           {error && <div className="alert alert-error">{error}</div>}

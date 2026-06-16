@@ -22,7 +22,7 @@
     <meta property="og:url" content="https://phptool.site/" />
     <meta property="og:title" content="PHP Tool - Tool Reg/Very Facebook Tự Động" />
     <meta property="og:description" content="Tool tự động đăng ký và xác minh tài khoản Facebook hàng loạt. Hỗ trợ Hotmail, SMS, Gmail. Giao diện dễ sử dụng, giá rẻ nhất thị trường." />
-    <meta property="og:image" content="/logo.png" />
+    <meta property="og:image" content="https://phptool.site/logo.png" />
     <meta property="og:locale" content="vi_VN" />
     <meta property="og:site_name" content="PHP Tool" />
 
@@ -31,7 +31,7 @@
     <meta property="twitter:url" content="https://phptool.dev/" />
     <meta property="twitter:title" content="PHP Tool - Tool Reg/Very Facebook Tự Động" />
     <meta property="twitter:description" content="Tool tự động đăng ký và xác minh tài khoản Facebook hàng loạt. Hỗ trợ Hotmail, SMS, Gmail." />
-    <meta property="twitter:image" content="/logo.png" />
+    <meta property="twitter:image" content="https://phptool.site/logo.png" />
     
     <!-- Structured Data / JSON-LD -->
     <script type="application/ld+json">
@@ -59,11 +59,25 @@
     <!-- Preconnect to external resources -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
     
     <!-- Favicon variants -->
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <!-- Theme color tokens (light/dark) - loaded before everything else -->
+    <link rel="stylesheet" href="/theme.css" />
+    
+    <!-- Prevent flash of wrong theme -->
+    <script>
+      (function() {
+        var theme = localStorage.getItem('theme');
+        if (theme === 'dark') {
+          document.documentElement.classList.add('dark');
+        }
+      })();
+    </script>
   </head>
   <body>
     <!-- GitHub Pages SPA redirect handler -->
