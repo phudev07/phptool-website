@@ -111,11 +111,10 @@ service cloud.firestore {
     match /transactions/{transactionId} {
       allow read, write: if isAdmin();
       allow read: if request.auth != null && resource.data.userId == request.auth.uid;
-      // Chỉ cho phép tự ghi log giao dịch mua bản quyền với số tiền âm (debit)
       allow create: if request.auth != null && 
                     request.resource.data.userId == request.auth.uid &&
                     request.resource.data.type == 'license_purchase' &&
-                    request.resource.data.amount < 0;
+                    request.resource.data.amount <= 0;
     }
     
     match /deposits/{depositId} {

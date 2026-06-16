@@ -1,8 +1,10 @@
-import { useState, useEffect } from'react';
-import { Navigate } from'react-router-dom';
-import Navbar from'../../components/Layout/Navbar';
-import { useAuth } from'../../contexts/AuthContext';
-import { getProducts, updateProduct, addProduct, deleteProduct } from'../../services/productsService';
+import { useState, useEffect } from 'react';
+import { Navigate } from 'react-router-dom';
+import Navbar from '../../components/Layout/Navbar';
+import { useAuth } from '../../contexts/AuthContext';
+import { getProducts, updateProduct, addProduct, deleteProduct } from '../../services/productsService';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../../services/firebase';
 
 export default function AdminSettings() {
  const { isAdmin, loading: authLoading } = useAuth();
@@ -61,16 +63,27 @@ export default function AdminSettings() {
     setLoading(false);
   }
 
-  function handleToggleAccordion(id) {
+  async function handleToggleAccordion(id) {
     if (expandedId === id) {
       setExpandedId('');
     } else {
       setExpandedId(id);
       const prod = products.find(p => p.id === id);
       if (prod) {
+        let secureDownloadUrl = '';
+        try {
+          const secureDocRef = doc(db, 'products_secure', id);
+          const secureDocSnap = await getDoc(secureDocRef);
+          if (secureDocSnap.exists()) {
+            secureDownloadUrl = secureDocSnap.data().downloadUrl || '';
+          }
+        } catch (err) {
+          console.error("Error fetching secure download URL:", err);
+        }
+
         setEditFields({
           version: prod.version || '1.0.0',
-          downloadUrl: prod.downloadUrl || '',
+          downloadUrl: secureDownloadUrl,
           changelog: prod.changelog || '',
           name: prod.name || '',
           tagline: prod.tagline || '',
