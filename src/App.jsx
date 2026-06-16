@@ -37,6 +37,24 @@ function PrivateRoute({ children }) {
   return currentUser ? children : <Navigate to="/login" />;
 }
 
+// Admin Route Component
+function AdminRoute({ children }) {
+  const { currentUser, isAdmin, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="loading-page">
+        <div className="loading-content">
+          <div className="loading-spinner"></div>
+          <p>Đang tải...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return currentUser && isAdmin() ? children : <Navigate to="/dashboard" />;
+}
+
 // Public Route (redirect if logged in)
 function PublicRoute({ children }) {
   const { currentUser, loading } = useAuth();
@@ -107,45 +125,45 @@ function AppRoutes() {
 
       {/* Admin Routes */}
       <Route path="/admin" element={
-        <PrivateRoute>
+        <AdminRoute>
           <AdminDashboard />
-        </PrivateRoute>
+        </AdminRoute>
       } />
 
       <Route path="/admin/users" element={
-        <PrivateRoute>
+        <AdminRoute>
           <AdminUsers />
-        </PrivateRoute>
+        </AdminRoute>
       } />
       
       <Route path="/admin/licenses" element={
-        <PrivateRoute>
+        <AdminRoute>
           <AdminLicenses />
-        </PrivateRoute>
+        </AdminRoute>
       } />
       
       <Route path="/admin/orders" element={
-        <PrivateRoute>
+        <AdminRoute>
           <AdminOrders />
-        </PrivateRoute>
+        </AdminRoute>
       } />
 
       <Route path="/admin/deposits" element={
-        <PrivateRoute>
+        <AdminRoute>
           <AdminDeposits />
-        </PrivateRoute>
+        </AdminRoute>
       } />
 
       <Route path="/admin/stats" element={
-        <PrivateRoute>
+        <AdminRoute>
           <AdminStats />
-        </PrivateRoute>
+        </AdminRoute>
       } />
 
       <Route path="/admin/settings" element={
-        <PrivateRoute>
+        <AdminRoute>
           <AdminSettings />
-        </PrivateRoute>
+        </AdminRoute>
       } />
 
       {/* Catch all - redirect to home */}
