@@ -141,9 +141,20 @@ service cloud.firestore {
     // ==========================================
     // BẢO MẬT BẢNG SETTINGS (Cấu hình hệ thống)
     // ==========================================
+    // 1. Cho phép đọc thông tin phần mềm (phiên bản, changelog) công khai để client check update
+    match /settings/software {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // 2. Chỉ Admin mới được đọc/ghi thông tin cấu hình Telegram Bot Token & Chat ID
+    match /settings/telegram {
+      allow read, write: if isAdmin();
+    }
+    
+    // 3. Các tài liệu cấu hình hệ thống khác mặc định được bảo vệ riêng tư chỉ Admin truy cập
     match /settings/{document} {
-      allow read: if true; // Ai cũng có thể xem phiên bản tool, changelog
-      allow write: if isAdmin(); // Chỉ admin được cấu hình
+      allow read, write: if isAdmin();
     }
     
     // Bảng products (Danh sách các gói tool bán trên Store)
