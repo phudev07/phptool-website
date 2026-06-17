@@ -89,18 +89,28 @@ service cloud.firestore {
       // HWID chỉ cho phép cập nhật từ null sang giá trị khác (khoá thiết bị lần đầu) hoặc giữ nguyên, không được tự đặt lại thành null hay đổi máy.
       allow update: if request.auth != null && 
                     resource.data.userId == request.auth.uid && 
-                    request.resource.data.plan == resource.data.plan &&
-                    request.resource.data.expiresAt == resource.data.expiresAt &&
-                    request.resource.data.productId == resource.data.productId &&
-                    request.resource.data.userId == resource.data.userId &&
-                    request.resource.data.licenseKey == resource.data.licenseKey &&
-                    request.resource.data.price == resource.data.price &&
+                    !request.resource.data.diff(resource.data).affectedKeys().hasAny(['plan', 'expiresAt', 'productId', 'userId', 'licenseKey', 'price']) &&
                     (
                       request.resource.data.status == resource.data.status ||
                       (resource.data.status == 'pending' && request.resource.data.status == 'active')
                     ) &&
                     (
+                      // Reset HWID (set to null)
+                      (request.resource.data.hwid == null && resource.data.hwid != null &&
+                       (
+                         !('hwidHistory' in resource.data) ||
+                         (
+                           request.resource.data.hwidHistory.size() == resource.data.hwidHistory.size() + 1 &&
+                           (
+                             (resource.data.plan == 'lifetime' && request.resource.data.hwidHistory.size() <= 6) ||
+                             (resource.data.plan != 'lifetime' && request.resource.data.hwidHistory.size() <= 3)
+                           )
+                         )
+                       )
+                      ) ||
+                      // Bind HWID (from null to non-null)
                       (resource.data.hwid == null && request.resource.data.hwid != null) ||
+                      // Keep HWID (no change)
                       (resource.data.hwid == request.resource.data.hwid)
                     );
     }

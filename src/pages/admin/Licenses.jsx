@@ -333,14 +333,32 @@ export default function AdminLicenses() {
  }
  }
 
- async function handleDeleteLicense(licenseId) {
- try {
- await deleteDoc(doc(db,'licenses', licenseId));
- setLicenses(licenses.filter(l => l.id !== licenseId));
- } catch (error) {
- console.error('Error deleting license:', error);
- }
- }
+  async function handleDeleteLicense(licenseId) {
+    if (!window.confirm('Bạn có chắc chắn muốn xóa key này? Giao dịch này sẽ thu hồi quyền sở hữu tải tool của user.')) return;
+    try {
+      // Find the license details first
+      const licenseToDelete = licenses.find(l => l.id === licenseId);
+      
+      // Delete the license doc
+      await deleteDoc(doc(db, 'licenses', licenseId));
+      
+      // If the license is linked to a user, delete the active_tools document too
+      if (licenseToDelete && licenseToDelete.userId) {
+        try {
+          const activeToolRef = doc(db, 'users', licenseToDelete.userId, 'active_tools', licenseToDelete.productId);
+          await deleteDoc(activeToolRef);
+        } catch (activeToolErr) {
+          console.error('Error deleting active tool mapping:', activeToolErr);
+        }
+      }
+      
+      setLicenses(licenses.filter(l => l.id !== licenseId));
+      alert('Đã xóa key và hủy liên kết sản phẩm thành công!');
+    } catch (error) {
+      console.error('Error deleting license:', error);
+      alert('Xóa key thất bại: ' + error.message);
+    }
+  }
   if (!authLoading && !isAdmin()) {
     return <Navigate to="/dashboard" />;
   }

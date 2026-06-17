@@ -212,41 +212,49 @@ export default function MyLicenses() {
     setActivating(false);
   }
 
- async function handleResetHwid() {
- if (!selectedLicense) return;
- if (!window.confirm('Bạn có chắc chắn muốn reset HWID cho key này?')) return;
- setResetting(true);
- try {
- const currentHwid = selectedLicense.hwid;
- const hwidHistory = selectedLicense.hwidHistory || [];
- if (currentHwid) {
- hwidHistory.push(currentHwid);
- }
+  async function handleResetHwid() {
+    if (!selectedLicense) return;
 
- const docRef = doc(db,'licenses', selectedLicense.id);
- await updateDoc(docRef, {
- hwid: null,
- hwidHistory: hwidHistory
- });
+    const hwidHistory = selectedLicense.hwidHistory || [];
+    const limit = selectedLicense.plan === 'lifetime' ? 6 : 3;
+    if (hwidHistory.length >= limit) {
+      alert(`Bạn đã đạt giới hạn đổi máy tối đa (${limit} lần). Vui lòng liên hệ Admin để được hỗ trợ.`);
+      return;
+    }
 
- // Update state
- const updatedLicenses = licenses.map(l => {
- if (l.id === selectedLicense.id) {
- const updated = { ...l, hwid: null, hwidHistory };
- setSelectedLicense(updated);
- setHwidInput('');
- return updated;
- }
- return l;
- });
- setLicenses(updatedLicenses);
- alert('Đã reset HWID thành công! Bạn có thể gán HWID thiết bị mới.');
- } catch (error) {
- console.error('Error resetting HWID:', error);
- alert('Reset thất bại:' + error.message);
- }
- setResetting(false);
- }
+    if (!window.confirm(`Bạn có chắc chắn muốn reset HWID cho key này? (Giới hạn: đổi tối đa ${limit} lần. Bạn đã đổi ${hwidHistory.length} lần)`)) return;
+    setResetting(true);
+    try {
+      const currentHwid = selectedLicense.hwid;
+      const updatedHistory = [...hwidHistory];
+      if (currentHwid) {
+        updatedHistory.push(currentHwid);
+      }
+
+      const docRef = doc(db,'licenses', selectedLicense.id);
+      await updateDoc(docRef, {
+        hwid: null,
+        hwidHistory: updatedHistory
+      });
+
+      // Update state
+      const updatedLicenses = licenses.map(l => {
+        if (l.id === selectedLicense.id) {
+          const updated = { ...l, hwid: null, hwidHistory: updatedHistory };
+          setSelectedLicense(updated);
+          setHwidInput('');
+          return updated;
+        }
+        return l;
+      });
+      setLicenses(updatedLicenses);
+      alert('Đã reset HWID thành công! Bạn có thể gán HWID thiết bị mới.');
+    } catch (error) {
+      console.error('Error resetting HWID:', error);
+      alert('Reset thất bại: ' + error.message);
+    }
+    setResetting(false);
+  }
 
  async function handleSelectLicense(lic) {
     setSelectedLicense(lic);
@@ -569,6 +577,11 @@ export default function MyLicenses() {
 
       <p className="font-body-md text-body-md text-secondary mt-2 text-xs">
       Lưu ý: Sau khi kích hoạt HWID, giấy phép sẽ được khóa cố định vào thiết bị này. Nếu cần đổi thiết bị khác, hãy nhấn nút <strong>Reset HWID</strong> trước khi gán.
+      {selectedLicense.plan && (
+        <span className="block mt-1 text-[#c21a5b] font-semibold">
+          Số lần đổi máy còn lại: {Math.max(0, (selectedLicense.plan === 'lifetime' ? 6 : 3) - (selectedLicense.hwidHistory?.length || 0))} / {selectedLicense.plan === 'lifetime' ? 6 : 3} lần.
+        </span>
+      )}
       </p>
       </div>
     </div>
