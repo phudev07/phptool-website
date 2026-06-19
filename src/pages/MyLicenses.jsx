@@ -75,29 +75,29 @@ export default function MyLicenses() {
    console.error("Error updating active tools for backward compatibility:", err);
  }
 
- // Add virtual licenses for tools owned via active_tools but having no key (requireHwid === false)
- activeToolsSnapshot.docs.forEach(d => {
-   const prodId = d.id;
-   const activeData = d.data();
-   const alreadyListed = licensesData.some(l => l.productId === prodId);
-   if (!alreadyListed && activeData.active === true) {
-     const prod = pMap[prodId];
-     licensesData.push({
-       id: `virtual_${prodId}`,
-       userId: currentUser.uid,
-       productId: prodId,
-       productName: prod?.name || prodId,
-       licenseKey: 'Không yêu cầu (Direct Run)',
-       plan: activeData.plan || 'lifetime',
-       planName: activeData.plan === 'lifetime' ? 'Vĩnh viễn' : (activeData.plan === 'monthly' ? 'Gói tháng' : 'Gói của bạn'),
-       price: 0,
-       status: 'active',
-       hwid: null,
-       expiresAt: null,
-       createdAt: activeData.updatedAt || null
-     });
-   }
- });
+  // Add virtual licenses for tools owned via active_tools but having no key (requireHwid === false)
+  activeToolsSnapshot.docs.forEach(d => {
+    const prodId = d.id;
+    const activeData = d.data();
+    const alreadyListed = licensesData.some(l => l.productId === prodId);
+    const prod = pMap[prodId];
+    if (!alreadyListed && activeData.active === true && prod?.requireHwid === false) {
+      licensesData.push({
+        id: `virtual_${prodId}`,
+        userId: currentUser.uid,
+        productId: prodId,
+        productName: prod?.name || prodId,
+        licenseKey: 'Không yêu cầu (Direct Run)',
+        plan: activeData.plan || 'lifetime',
+        planName: activeData.plan === 'lifetime' ? 'Vĩnh viễn' : (activeData.plan === 'monthly' ? 'Gói tháng' : 'Gói của bạn'),
+        price: 0,
+        status: 'active',
+        hwid: null,
+        expiresAt: null,
+        createdAt: activeData.updatedAt || null
+      });
+    }
+  });
 
  // Re-sort including virtual licenses
  licensesData.sort((a, b) => {

@@ -147,37 +147,97 @@ export default function BuyLicense() {
     setPurchasing(true);
 
     try {
-      const licenseKey = generateLicenseKey();
-      let expiryDate;
-      if (selectedPlan === 'daily') {
-        expiryDate = new Date();
-        expiryDate.setDate(expiryDate.getDate() + 1);
-        expiryDate.setHours(23, 59, 59, 999);
-      } else {
-        expiryDate = getExpiryDate(plan.days);
+      // Check if user already has an existing license for this product
+      let existingLicense = null;
+      if (product.requireHwid !== false) {
+        const q = query(
+          collection(db, 'licenses'),
+          where('userId', '==', currentUser.uid),
+          where('productId', '==', product.id)
+        );
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          // Find the one with furthest expiresAt
+          let docs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          docs.sort((a, b) => {
+            const expA = a.expiresAt?.toDate ? a.expiresAt.toDate() : (a.expiresAt ? new Date(a.expiresAt) : new Date(0));
+            const expB = b.expiresAt?.toDate ? b.expiresAt.toDate() : (b.expiresAt ? new Date(b.expiresAt) : new Date(0));
+            return expB - expA;
+          });
+          existingLicense = docs[0];
+        }
       }
 
+      let newExpiryDate = null;
+      const daysToAdd = selectedPlan === 'daily' ? 1 : plan.days;
       const batch = writeBatch(db);
-
-      // 1. Create license doc (only if HWID is required)
       let licenseRef = null;
+
       if (product.requireHwid !== false) {
-        licenseRef = doc(collection(db, 'licenses'));
-        batch.set(licenseRef, {
-          userId: currentUser.uid,
-          userEmail: currentUser.email,
-          productId: product.id,
-          productName: product.name,
-          licenseKey: licenseKey,
-          plan: selectedPlan,
-          planName: plan.name,
-          price: plan.price,
-          status: 'active',
-          hwid: null,
-          hwidHistory: [],
-          expiresAt: expiryDate,
-          createdAt: serverTimestamp()
-        });
+        if (existingLicense) {
+          licenseRef = doc(db, 'licenses', existingLicense.id);
+          const currentExpiry = existingLicense.expiresAt?.toDate ? existingLicense.expiresAt.toDate() : (existingLicense.expiresAt ? new Date(existingLicense.expiresAt) : null);
+          
+          if (selectedPlan === 'lifetime' || existingLicense.plan === 'lifetime') {
+            newExpiryDate = null; // Keep/make lifetime
+          } else if (currentExpiry) {
+            const now = new Date();
+            if (currentExpiry > now) {
+              // Active: extend from the current expiry date
+              newExpiryDate = new Date(currentExpiry);
+              newExpiryDate.setDate(newExpiryDate.getDate() + daysToAdd);
+              newExpiryDate.setHours(23, 59, 59, 999);
+            } else {
+              // Expired: start fresh from today
+              newExpiryDate = new Date();
+              newExpiryDate.setDate(newExpiryDate.getDate() + daysToAdd);
+              newExpiryDate.setHours(23, 59, 59, 999);
+            }
+          } else {
+            // No expiry set previously: start fresh
+            newExpiryDate = new Date();
+            newExpiryDate.setDate(newExpiryDate.getDate() + daysToAdd);
+            newExpiryDate.setHours(23, 59, 59, 999);
+          }
+
+          batch.update(licenseRef, {
+            plan: selectedPlan,
+            planName: plan.name,
+            price: plan.price,
+            status: 'active',
+            expiresAt: newExpiryDate,
+            updatedAt: serverTimestamp()
+          });
+        } else {
+          // Create new license doc
+          const licenseKey = generateLicenseKey();
+          if (selectedPlan === 'lifetime') {
+            newExpiryDate = null;
+          } else if (selectedPlan === 'daily') {
+            newExpiryDate = new Date();
+            newExpiryDate.setDate(newExpiryDate.getDate() + 1);
+            newExpiryDate.setHours(23, 59, 59, 999);
+          } else {
+            newExpiryDate = getExpiryDate(plan.days);
+          }
+
+          licenseRef = doc(collection(db, 'licenses'));
+          batch.set(licenseRef, {
+            userId: currentUser.uid,
+            userEmail: currentUser.email,
+            productId: product.id,
+            productName: product.name,
+            licenseKey: licenseKey,
+            plan: selectedPlan,
+            planName: plan.name,
+            price: plan.price,
+            status: 'active',
+            hwid: null,
+            hwidHistory: [],
+            expiresAt: newExpiryDate,
+            createdAt: serverTimestamp()
+          });
+        }
       }
 
       // 2. Update user balance

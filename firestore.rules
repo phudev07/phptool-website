@@ -85,33 +85,56 @@ service cloud.firestore {
                     getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.balance == 
                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.balance - request.resource.data.price;
                     
-      // Cho phép người dùng cập nhật bản quyền của chính mình (nhưng CẤM thay đổi hạn dùng, loại gói, hay trạng thái. Chỉ cho phép đổi trường HWID)
-      // HWID chỉ cho phép cập nhật từ null sang giá trị khác (khoá thiết bị lần đầu) hoặc giữ nguyên, không được tự đặt lại thành null hay đổi máy.
+      // Cho phép người dùng cập nhật bản quyền của chính mình:
+      // Trường hợp 1: Cập nhật thông thường (đổi máy/kích hoạt HWID, cấm thay đổi plan/expiresAt/price)
+      // Trường hợp 2: Gia hạn/mua thêm thời gian sử dụng (trả tiền qua balance, cộng dồn ngày hợp lệ)
       allow update: if request.auth != null && 
                     resource.data.userId == request.auth.uid && 
-                    !request.resource.data.diff(resource.data).affectedKeys().hasAny(['plan', 'expiresAt', 'productId', 'userId', 'licenseKey', 'price']) &&
                     (
-                      request.resource.data.status == resource.data.status ||
-                      (resource.data.status == 'pending' && request.resource.data.status == 'active')
-                    ) &&
-                    (
-                      // Reset HWID (set to null)
-                      (request.resource.data.hwid == null && resource.data.hwid != null &&
-                       (
-                         !('hwidHistory' in resource.data) ||
-                         (
-                           request.resource.data.hwidHistory.size() == resource.data.hwidHistory.size() + 1 &&
+                      // Trường hợp 1: Cập nhật HWID thông thường
+                      (
+                        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['plan', 'expiresAt', 'productId', 'userId', 'licenseKey', 'price']) &&
+                        (
+                          request.resource.data.status == resource.data.status ||
+                          (resource.data.status == 'pending' && request.resource.data.status == 'active')
+                        ) &&
+                        (
+                          // Reset HWID (set to null)
+                          (request.resource.data.hwid == null && resource.data.hwid != null &&
                            (
-                             (resource.data.plan == 'lifetime' && request.resource.data.hwidHistory.size() <= 6) ||
-                             (resource.data.plan != 'lifetime' && request.resource.data.hwidHistory.size() <= 3)
+                             !('hwidHistory' in resource.data) ||
+                             (
+                               request.resource.data.hwidHistory.size() == resource.data.hwidHistory.size() + 1 &&
+                               (
+                                 (resource.data.plan == 'lifetime' && request.resource.data.hwidHistory.size() <= 6) ||
+                                 (resource.data.plan != 'lifetime' && request.resource.data.hwidHistory.size() <= 3)
+                               )
+                             )
                            )
-                         )
-                       )
+                          ) ||
+                          // Bind HWID (from null to non-null)
+                          (resource.data.hwid == null && request.resource.data.hwid != null) ||
+                          // Keep HWID (no change)
+                          (resource.data.hwid == request.resource.data.hwid)
+                        )
                       ) ||
-                      // Bind HWID (from null to non-null)
-                      (resource.data.hwid == null && request.resource.data.hwid != null) ||
-                      // Keep HWID (no change)
-                      (resource.data.hwid == request.resource.data.hwid)
+                      // Trường hợp 2: Gia hạn / mua thêm ngày sử dụng (Giao dịch trừ tiền)
+                      (
+                        request.resource.data.productId == resource.data.productId &&
+                        request.resource.data.userId == resource.data.userId &&
+                        request.resource.data.licenseKey == resource.data.licenseKey &&
+                        request.resource.data.price == get(/databases/$(database)/documents/products/$(resource.data.productId)).data.plans[request.resource.data.plan].price &&
+                        getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.balance == 
+                        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.balance - request.resource.data.price &&
+                        (
+                          (request.resource.data.plan == 'lifetime' && request.resource.data.expiresAt == null) ||
+                          (
+                            request.resource.data.expiresAt != null &&
+                            request.resource.data.expiresAt >= (('expiresAt' in resource.data && resource.data.expiresAt != null && resource.data.expiresAt > request.time) ? resource.data.expiresAt : request.time) + duration.value(get(/databases/$(database)/documents/products/$(resource.data.productId)).data.plans[request.resource.data.plan].days, 'd') - duration.value(1, 'h') &&
+                            request.resource.data.expiresAt <= (('expiresAt' in resource.data && resource.data.expiresAt != null && resource.data.expiresAt > request.time) ? resource.data.expiresAt : request.time) + duration.value(get(/databases/$(database)/documents/products/$(resource.data.productId)).data.plans[request.resource.data.plan].days + 1, 'd')
+                          )
+                        )
+                      )
                     );
     }
 
