@@ -371,7 +371,7 @@ export default function BuyLicense() {
                 {/* Description */}
                 <div className="space-y-4">
                   <h3 className="font-label-md text-label-md text-on-surface uppercase tracking-wider">Mô Tả Sản Phẩm</h3>
-                  <p className="font-body-lg text-body-lg text-on-surface-variant leading-relaxed">
+                  <p className="font-body-lg text-body-lg text-on-surface-variant leading-relaxed" style={{ whiteSpace: 'pre-wrap' }}>
                     {product.description}
                   </p>
                 </div>
