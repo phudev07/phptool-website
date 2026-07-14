@@ -169,7 +169,7 @@ export default function BuyLicense() {
       }
 
       let newExpiryDate = null;
-      const daysToAdd = selectedPlan === 'daily' ? 1 : plan.days;
+      const daysToAdd = plan.days;
       const batch = writeBatch(db);
       let licenseRef = null;
 
@@ -213,12 +213,11 @@ export default function BuyLicense() {
           const licenseKey = generateLicenseKey();
           if (selectedPlan === 'lifetime') {
             newExpiryDate = null;
-          } else if (selectedPlan === 'daily') {
-            newExpiryDate = new Date();
-            newExpiryDate.setDate(newExpiryDate.getDate() + 1);
-            newExpiryDate.setHours(23, 59, 59, 999);
           } else {
             newExpiryDate = getExpiryDate(plan.days);
+            if (newExpiryDate) {
+              newExpiryDate.setHours(23, 59, 59, 999);
+            }
           }
 
           licenseRef = doc(collection(db, 'licenses'));
@@ -429,6 +428,11 @@ export default function BuyLicense() {
                         >
                           <div>
                             <div className={`font-label-md text-label-md font-bold ${selectedPlan === key ? 'text-[#c21a5b]' : 'text-on-surface'}`}>{p.name}</div>
+                            {p.description && (
+                              <div className="text-secondary text-xs mt-1 leading-normal font-normal">
+                                {p.description}
+                              </div>
+                            )}
                           </div>
                           <div className="text-right shrink-0">
                             <span className="font-headline-md text-headline-md font-bold text-[#c21a5b]">

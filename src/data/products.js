@@ -45,6 +45,13 @@ export const PRODUCTS = [
         popular: true,
         save: '22%'
       },
+      yearly: {
+        name: 'Gói Năm',
+        price: 1800000,
+        days: 365,
+        description: 'Tiết kiệm lâu dài, cập nhật miễn phí',
+        popular: false
+      },
       lifetime: {
         name: 'Gói Vĩnh Viễn',
         price: 3500000,

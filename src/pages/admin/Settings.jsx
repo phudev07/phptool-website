@@ -24,8 +24,21 @@ export default function AdminSettings() {
     description: '',
     image: '',
     dailyPrice: '',
+    dailyDays: '1',
+    dailyName: 'Gói Theo Ngày',
+    dailyDescription: 'Phù hợp trải nghiệm nhanh',
     monthlyPrice: '',
+    monthlyDays: '30',
+    monthlyName: 'Gói Tháng',
+    monthlyDescription: 'Khuyên dùng, tiết kiệm nhất',
+    yearlyPrice: '',
+    yearlyDays: '365',
+    yearlyName: 'Gói Năm',
+    yearlyDescription: 'Tiết kiệm lâu dài',
     lifetimePrice: '',
+    lifetimeDays: '36500',
+    lifetimeName: 'Gói Vĩnh Viễn',
+    lifetimeDescription: 'Sử dụng trọn đời, update mãi mãi',
     type: 'php-tool',
     requireHwid: true,
     videoTutorial: '',
@@ -44,8 +57,21 @@ export default function AdminSettings() {
     icon: 'terminal',
     image: '',
     dailyPrice: '',
+    dailyDays: '1',
+    dailyName: 'Gói Theo Ngày',
+    dailyDescription: 'Phù hợp trải nghiệm nhanh',
     monthlyPrice: '',
+    monthlyDays: '30',
+    monthlyName: 'Gói Tháng',
+    monthlyDescription: 'Khuyên dùng, tiết kiệm nhất',
+    yearlyPrice: '',
+    yearlyDays: '365',
+    yearlyName: 'Gói Năm',
+    yearlyDescription: 'Tiết kiệm lâu dài',
     lifetimePrice: '',
+    lifetimeDays: '36500',
+    lifetimeName: 'Gói Vĩnh Viễn',
+    lifetimeDescription: 'Sử dụng trọn đời, update mãi mãi',
     requireHwid: true,
     videoTutorial: '',
     features: 'Cập nhật phiên bản tự động\nHỗ trợ đa luồng siêu tốc\nTương thích Windows 10/11',
@@ -90,8 +116,21 @@ export default function AdminSettings() {
           description: prod.description || '',
           image: prod.image || '',
           dailyPrice: prod.plans?.daily?.price?.toString() || '',
+          dailyDays: prod.plans?.daily?.days?.toString() || '1',
+          dailyName: prod.plans?.daily?.name || 'Gói Theo Ngày',
+          dailyDescription: prod.plans?.daily?.description || 'Phù hợp trải nghiệm nhanh',
           monthlyPrice: prod.plans?.monthly?.price?.toString() || '',
+          monthlyDays: prod.plans?.monthly?.days?.toString() || '30',
+          monthlyName: prod.plans?.monthly?.name || 'Gói Tháng',
+          monthlyDescription: prod.plans?.monthly?.description || 'Khuyên dùng, tiết kiệm nhất',
+          yearlyPrice: prod.plans?.yearly?.price?.toString() || '',
+          yearlyDays: prod.plans?.yearly?.days?.toString() || '365',
+          yearlyName: prod.plans?.yearly?.name || 'Gói Năm',
+          yearlyDescription: prod.plans?.yearly?.description || 'Tiết kiệm lâu dài',
           lifetimePrice: prod.plans?.lifetime?.price?.toString() || '',
+          lifetimeDays: prod.plans?.lifetime?.days?.toString() || '36500',
+          lifetimeName: prod.plans?.lifetime?.name || 'Gói Vĩnh Viễn',
+          lifetimeDescription: prod.plans?.lifetime?.description || 'Sử dụng trọn đời, update mãi mãi',
           type: prod.type || 'php-tool',
           requireHwid: prod.requireHwid !== false,
           videoTutorial: prod.videoTutorial || '',
@@ -116,32 +155,42 @@ export default function AdminSettings() {
       } else {
         const dp = editFields.dailyPrice !== '' ? parseInt(editFields.dailyPrice) : NaN;
         const mp = editFields.monthlyPrice !== '' ? parseInt(editFields.monthlyPrice) : NaN;
+        const yp = editFields.yearlyPrice !== '' ? parseInt(editFields.yearlyPrice) : NaN;
         const lp = editFields.lifetimePrice !== '' ? parseInt(editFields.lifetimePrice) : NaN;
 
         if (!isNaN(dp) && dp >= 0) {
           plans.daily = {
-            name: 'Gói Theo Ngày',
+            name: editFields.dailyName || 'Gói Theo Ngày',
             price: dp,
-            days: 1,
-            description: 'Phù hợp trải nghiệm nhanh',
+            days: editFields.dailyDays ? parseInt(editFields.dailyDays) : 1,
+            description: editFields.dailyDescription || 'Phù hợp trải nghiệm nhanh',
             popular: false
           };
         }
         if (!isNaN(mp) && mp >= 0) {
           plans.monthly = {
-            name: 'Gói Tháng',
+            name: editFields.monthlyName || 'Gói Tháng',
             price: mp,
-            days: 30,
-            description: 'Khuyên dùng, tiết kiệm nhất',
+            days: editFields.monthlyDays ? parseInt(editFields.monthlyDays) : 30,
+            description: editFields.monthlyDescription || 'Khuyên dùng, tiết kiệm nhất',
             popular: true
+          };
+        }
+        if (!isNaN(yp) && yp >= 0) {
+          plans.yearly = {
+            name: editFields.yearlyName || 'Gói Năm',
+            price: yp,
+            days: editFields.yearlyDays ? parseInt(editFields.yearlyDays) : 365,
+            description: editFields.yearlyDescription || 'Tiết kiệm lâu dài',
+            popular: false
           };
         }
         if (!isNaN(lp) && lp >= 0) {
           plans.lifetime = {
-            name: 'Gói Vĩnh Viễn',
+            name: editFields.lifetimeName || 'Gói Vĩnh Viễn',
             price: lp,
-            days: 36500,
-            description: 'Sử dụng trọn đời, update mãi mãi',
+            days: editFields.lifetimeDays ? parseInt(editFields.lifetimeDays) : 36500,
+            description: editFields.lifetimeDescription || 'Sử dụng trọn đời, update mãi mãi',
             popular: false
           };
         }
@@ -156,7 +205,7 @@ export default function AdminSettings() {
               popular: true
             };
           } else {
-            alert('Vui lòng nhập giá cho ít nhất một gói (Ngày, Tháng hoặc Vĩnh viễn)!');
+            alert('Vui lòng nhập giá cho ít nhất một gói (Ngày, Tháng, Năm hoặc Vĩnh viễn)!');
             return;
           }
         }
@@ -200,7 +249,7 @@ export default function AdminSettings() {
   }
 
   async function handleAddToolSubmit() {
-    const { id, name, tagline, description, type, icon, image, dailyPrice, monthlyPrice, lifetimePrice, videoTutorial, features } = newTool;
+    const { id, name, tagline, description, type, icon, image, dailyPrice, dailyDays, dailyName, dailyDescription, monthlyPrice, monthlyDays, monthlyName, monthlyDescription, yearlyPrice, yearlyDays, yearlyName, yearlyDescription, lifetimePrice, lifetimeDays, lifetimeName, lifetimeDescription, videoTutorial, features } = newTool;
     
     if (!id.trim() || !name.trim()) {
       alert('Vui lòng nhập ID và Tên Tool!');
@@ -228,32 +277,42 @@ export default function AdminSettings() {
       } else {
         const dp = dailyPrice !== '' ? parseInt(dailyPrice) : NaN;
         const mp = monthlyPrice !== '' ? parseInt(monthlyPrice) : NaN;
+        const yp = yearlyPrice !== '' ? parseInt(yearlyPrice) : NaN;
         const lp = lifetimePrice !== '' ? parseInt(lifetimePrice) : NaN;
 
         if (!isNaN(dp) && dp >= 0) {
           plans.daily = {
-            name: 'Gói Theo Ngày',
+            name: dailyName || 'Gói Theo Ngày',
             price: dp,
-            days: 1,
-            description: 'Phù hợp trải nghiệm nhanh',
+            days: dailyDays ? parseInt(dailyDays) : 1,
+            description: dailyDescription || 'Phù hợp trải nghiệm nhanh',
             popular: false
           };
         }
         if (!isNaN(mp) && mp >= 0) {
           plans.monthly = {
-            name: 'Gói Tháng',
+            name: monthlyName || 'Gói Tháng',
             price: mp,
-            days: 30,
-            description: 'Khuyên dùng, tiết kiệm nhất',
+            days: monthlyDays ? parseInt(monthlyDays) : 30,
+            description: monthlyDescription || 'Khuyên dùng, tiết kiệm nhất',
             popular: true
+          };
+        }
+        if (!isNaN(yp) && yp >= 0) {
+          plans.yearly = {
+            name: yearlyName || 'Gói Năm',
+            price: yp,
+            days: yearlyDays ? parseInt(yearlyDays) : 365,
+            description: yearlyDescription || 'Tiết kiệm lâu dài',
+            popular: false
           };
         }
         if (!isNaN(lp) && lp >= 0) {
           plans.lifetime = {
-            name: 'Gói Vĩnh Viễn',
+            name: lifetimeName || 'Gói Vĩnh Viễn',
             price: lp,
-            days: 36500,
-            description: 'Sử dụng trọn đời, update mãi mãi',
+            days: lifetimeDays ? parseInt(lifetimeDays) : 36500,
+            description: lifetimeDescription || 'Sử dụng trọn đời, update mãi mãi',
             popular: false
           };
         }
@@ -268,7 +327,7 @@ export default function AdminSettings() {
               popular: true
             };
           } else {
-            alert('Vui lòng nhập giá cho ít nhất một gói (Ngày, Tháng hoặc Vĩnh viễn)!');
+            alert('Vui lòng nhập giá cho ít nhất một gói (Ngày, Tháng, Năm hoặc Vĩnh viễn)!');
             return;
           }
         }
@@ -310,8 +369,21 @@ export default function AdminSettings() {
         icon: 'terminal',
         image: '',
         dailyPrice: '',
+        dailyDays: '1',
+        dailyName: 'Gói Theo Ngày',
+        dailyDescription: 'Phù hợp trải nghiệm nhanh',
         monthlyPrice: '',
+        monthlyDays: '30',
+        monthlyName: 'Gói Tháng',
+        monthlyDescription: 'Khuyên dùng, tiết kiệm nhất',
+        yearlyPrice: '',
+        yearlyDays: '365',
+        yearlyName: 'Gói Năm',
+        yearlyDescription: 'Tiết kiệm lâu dài',
         lifetimePrice: '',
+        lifetimeDays: '36500',
+        lifetimeName: 'Gói Vĩnh Viễn',
+        lifetimeDescription: 'Sử dụng trọn đời, update mãi mãi',
         requireHwid: true,
         hidden: false
       });
@@ -513,40 +585,200 @@ export default function AdminSettings() {
                 </div>
   
   {editFields.type !== 'free' && (
-  <div>
-  <label className="block font-label-md text-label-md text-on-surface-variant mb-2">Cài đặt bảng giá thuê (Để trống/nhập 0 để bỏ)</label>
-  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-surface-container-low border border-outline-variant rounded-lg p-3">
-    <div>
-      <label className="block text-[10px] font-semibold text-secondary mb-1">Ngày (VND)</label>
-      <input 
-        type="number"
-        value={editFields.dailyPrice}
-        onChange={(e) => setEditFields({ ...editFields, dailyPrice: e.target.value })}
-        className="w-full bg-surface border border-outline-variant rounded px-2 py-1 text-on-surface text-xs"
-      />
+  <div className="space-y-4">
+    <label className="block font-label-md text-label-md text-on-surface-variant">Cài đặt bảng giá thuê (Để trống hoặc nhập 0 đối với các gói không bán)</label>
+    <div className="space-y-4 bg-surface-container-low border border-outline-variant rounded-xl p-4">
+      {/* Daily Plan Card */}
+      <div className="border border-outline-variant/60 rounded-lg p-3 bg-surface/30 space-y-3">
+        <h5 className="text-xs font-bold text-on-surface text-secondary uppercase tracking-wider">Cấu hình Gói Ngày</h5>
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+          <div>
+            <label className="block text-[10px] font-semibold text-secondary mb-1">Giá thuê (VND)</label>
+            <input 
+              type="number"
+              placeholder="Ví dụ: 10000"
+              value={editFields.dailyPrice}
+              onChange={(e) => setEditFields({ ...editFields, dailyPrice: e.target.value })}
+              className="w-full bg-surface border border-outline-variant rounded px-2 py-1 text-on-surface text-xs"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-secondary mb-1">Tên gói hiển thị</label>
+            <input 
+              type="text"
+              placeholder="Gói Theo Ngày"
+              value={editFields.dailyName}
+              onChange={(e) => setEditFields({ ...editFields, dailyName: e.target.value })}
+              className="w-full bg-surface border border-outline-variant rounded px-2 py-1 text-on-surface text-xs"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-secondary mb-1">Số ngày sử dụng</label>
+            <input 
+              type="number"
+              placeholder="1"
+              value={editFields.dailyDays}
+              onChange={(e) => setEditFields({ ...editFields, dailyDays: e.target.value })}
+              className="w-full bg-surface border border-outline-variant rounded px-2 py-1 text-on-surface text-xs"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-secondary mb-1">Thông tin phụ/Mô tả</label>
+            <input 
+              type="text"
+              placeholder="Phù hợp trải nghiệm nhanh"
+              value={editFields.dailyDescription}
+              onChange={(e) => setEditFields({ ...editFields, dailyDescription: e.target.value })}
+              className="w-full bg-surface border border-outline-variant rounded px-2 py-1 text-on-surface text-xs"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Monthly Plan Card */}
+      <div className="border border-outline-variant/60 rounded-lg p-3 bg-surface/30 space-y-3">
+        <h5 className="text-xs font-bold text-on-surface text-secondary uppercase tracking-wider">Cấu hình Gói Tháng</h5>
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+          <div>
+            <label className="block text-[10px] font-semibold text-secondary mb-1">Giá thuê (VND)</label>
+            <input 
+              type="number"
+              placeholder="Ví dụ: 200000"
+              value={editFields.monthlyPrice}
+              onChange={(e) => setEditFields({ ...editFields, monthlyPrice: e.target.value })}
+              className="w-full bg-surface border border-outline-variant rounded px-2 py-1 text-on-surface text-xs"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-secondary mb-1">Tên gói hiển thị</label>
+            <input 
+              type="text"
+              placeholder="Gói Tháng"
+              value={editFields.monthlyName}
+              onChange={(e) => setEditFields({ ...editFields, monthlyName: e.target.value })}
+              className="w-full bg-surface border border-outline-variant rounded px-2 py-1 text-on-surface text-xs"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-secondary mb-1">Số ngày sử dụng</label>
+            <input 
+              type="number"
+              placeholder="30"
+              value={editFields.monthlyDays}
+              onChange={(e) => setEditFields({ ...editFields, monthlyDays: e.target.value })}
+              className="w-full bg-surface border border-outline-variant rounded px-2 py-1 text-on-surface text-xs"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-secondary mb-1">Thông tin phụ/Mô tả</label>
+            <input 
+              type="text"
+              placeholder="Khuyên dùng, tiết kiệm nhất"
+              value={editFields.monthlyDescription}
+              onChange={(e) => setEditFields({ ...editFields, monthlyDescription: e.target.value })}
+              className="w-full bg-surface border border-outline-variant rounded px-2 py-1 text-on-surface text-xs"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Yearly Plan Card */}
+      <div className="border border-outline-variant/60 rounded-lg p-3 bg-surface/30 space-y-3">
+        <h5 className="text-xs font-bold text-on-surface text-secondary uppercase tracking-wider">Cấu hình Gói Năm</h5>
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+          <div>
+            <label className="block text-[10px] font-semibold text-secondary mb-1">Giá thuê (VND)</label>
+            <input 
+              type="number"
+              placeholder="Ví dụ: 1500000"
+              value={editFields.yearlyPrice}
+              onChange={(e) => setEditFields({ ...editFields, yearlyPrice: e.target.value })}
+              className="w-full bg-surface border border-outline-variant rounded px-2 py-1 text-on-surface text-xs"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-secondary mb-1">Tên gói hiển thị</label>
+            <input 
+              type="text"
+              placeholder="Gói Năm"
+              value={editFields.yearlyName}
+              onChange={(e) => setEditFields({ ...editFields, yearlyName: e.target.value })}
+              className="w-full bg-surface border border-outline-variant rounded px-2 py-1 text-on-surface text-xs"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-secondary mb-1">Số ngày sử dụng</label>
+            <input 
+              type="number"
+              placeholder="365"
+              value={editFields.yearlyDays}
+              onChange={(e) => setEditFields({ ...editFields, yearlyDays: e.target.value })}
+              className="w-full bg-surface border border-outline-variant rounded px-2 py-1 text-on-surface text-xs"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-secondary mb-1">Thông tin phụ/Mô tả</label>
+            <input 
+              type="text"
+              placeholder="Tiết kiệm lâu dài"
+              value={editFields.yearlyDescription}
+              onChange={(e) => setEditFields({ ...editFields, yearlyDescription: e.target.value })}
+              className="w-full bg-surface border border-outline-variant rounded px-2 py-1 text-on-surface text-xs"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Lifetime Plan Card */}
+      <div className="border border-outline-variant/60 rounded-lg p-3 bg-surface/30 space-y-3">
+        <h5 className="text-xs font-bold text-on-surface text-secondary uppercase tracking-wider">Cấu hình Gói Vĩnh Viễn</h5>
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+          <div>
+            <label className="block text-[10px] font-semibold text-secondary mb-1">Giá thuê (VND)</label>
+            <input 
+              type="number"
+              placeholder="Ví dụ: 3500000"
+              value={editFields.lifetimePrice}
+              onChange={(e) => setEditFields({ ...editFields, lifetimePrice: e.target.value })}
+              className="w-full bg-surface border border-outline-variant rounded px-2 py-1 text-on-surface text-xs"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-secondary mb-1">Tên gói hiển thị</label>
+            <input 
+              type="text"
+              placeholder="Gói Vĩnh Viễn"
+              value={editFields.lifetimeName}
+              onChange={(e) => setEditFields({ ...editFields, lifetimeName: e.target.value })}
+              className="w-full bg-surface border border-outline-variant rounded px-2 py-1 text-on-surface text-xs"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-secondary mb-1">Số ngày sử dụng (Mặc định vĩnh viễn)</label>
+            <input 
+              type="number"
+              placeholder="36500"
+              disabled
+              value={editFields.lifetimeDays}
+              className="w-full bg-surface/50 border border-outline-variant/60 rounded px-2 py-1 text-secondary text-xs cursor-not-allowed"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-secondary mb-1">Thông tin phụ/Mô tả</label>
+            <input 
+              type="text"
+              placeholder="Sử dụng trọn đời, update mãi mãi"
+              value={editFields.lifetimeDescription}
+              onChange={(e) => setEditFields({ ...editFields, lifetimeDescription: e.target.value })}
+              className="w-full bg-surface border border-outline-variant rounded px-2 py-1 text-on-surface text-xs"
+            />
+          </div>
+        </div>
+      </div>
     </div>
-    <div>
-      <label className="block text-[10px] font-semibold text-secondary mb-1">Tháng (VND)</label>
-      <input 
-        type="number"
-        value={editFields.monthlyPrice}
-        onChange={(e) => setEditFields({ ...editFields, monthlyPrice: e.target.value })}
-        className="w-full bg-surface border border-outline-variant rounded px-2 py-1 text-on-surface text-xs"
-      />
-    </div>
-    <div>
-      <label className="block text-[10px] font-semibold text-secondary mb-1">Vĩnh viễn (VND)</label>
-      <input 
-        type="number"
-        value={editFields.lifetimePrice}
-        onChange={(e) => setEditFields({ ...editFields, lifetimePrice: e.target.value })}
-        className="w-full bg-surface border border-outline-variant rounded px-2 py-1 text-on-surface text-xs"
-      />
-    </div>
-  </div>
-  <p className="text-[11px] text-secondary mt-1">
-    * Để trống hoặc nhập 0 đối với các gói không bán. Cần có ít nhất 1 gói được cấu hình.
-  </p>
+    <p className="text-[11px] text-secondary mt-1">
+      * Để trống hoặc nhập 0 đối với các gói không bán. Cần có ít nhất 1 gói được cấu hình.
+    </p>
   </div>
   )}
   </div>
@@ -786,43 +1018,203 @@ export default function AdminSettings() {
    </div>
  </div>
 
- {newTool.type !=='free' && (
- <div className="bg-surface-container-low border border-outline-variant rounded-xl p-4 space-y-3">
- <h4 className="font-label-md text-label-md text-on-surface font-bold">Cài đặt bảng giá thuê</h4>
- <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
- <div>
- <label className="block text-[11px] font-semibold text-secondary mb-1">Gói ngày (VND)</label>
- <input 
- type="number" 
- value={newTool.dailyPrice}
- onChange={(e) => setNewTool({ ...newTool, dailyPrice: e.target.value })}
- className="w-full bg-surface border border-outline-variant rounded-lg px-3 py-1.5 text-on-surface text-sm"
- />
- </div>
- <div>
- <label className="block text-[11px] font-semibold text-secondary mb-1">Gói tháng (VND)</label>
- <input 
- type="number" 
- value={newTool.monthlyPrice}
- onChange={(e) => setNewTool({ ...newTool, monthlyPrice: e.target.value })}
- className="w-full bg-surface border border-outline-variant rounded-lg px-3 py-1.5 text-on-surface text-sm"
- />
- </div>
- <div>
- <label className="block text-[11px] font-semibold text-secondary mb-1">Vĩnh viễn (VND)</label>
- <input 
- type="number" 
- value={newTool.lifetimePrice}
- onChange={(e) => setNewTool({ ...newTool, lifetimePrice: e.target.value })}
- className="w-full bg-surface border border-outline-variant rounded-lg px-3 py-1.5 text-on-surface text-sm"
- />
- </div>
- </div>
- <p className="text-[11px] text-secondary mt-1">
-    * Để trống hoặc nhập 0 đối với các gói không bán. Cần có ít nhất 1 gói được cấu hình.
-  </p>
- </div>
- )}
+ {newTool.type !== 'free' && (
+  <div className="bg-surface-container-low border border-outline-variant rounded-xl p-4 space-y-4">
+    <h4 className="font-label-md text-label-md text-on-surface font-bold">Cài đặt bảng giá thuê (Để trống hoặc nhập 0 đối với các gói không bán)</h4>
+    <div className="space-y-4">
+      {/* Daily Plan Card */}
+      <div className="border border-outline-variant/60 rounded-lg p-3 bg-surface/30 space-y-3">
+        <h5 className="text-xs font-bold text-on-surface text-secondary uppercase tracking-wider">Cấu hình Gói Ngày</h5>
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+          <div>
+            <label className="block text-[10px] font-semibold text-secondary mb-1">Giá thuê (VND)</label>
+            <input 
+              type="number"
+              placeholder="Ví dụ: 10000"
+              value={newTool.dailyPrice}
+              onChange={(e) => setNewTool({ ...newTool, dailyPrice: e.target.value })}
+              className="w-full bg-surface border border-outline-variant rounded px-2 py-1 text-on-surface text-xs"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-secondary mb-1">Tên gói hiển thị</label>
+            <input 
+              type="text"
+              placeholder="Gói Theo Ngày"
+              value={newTool.dailyName}
+              onChange={(e) => setNewTool({ ...newTool, dailyName: e.target.value })}
+              className="w-full bg-surface border border-outline-variant rounded px-2 py-1 text-on-surface text-xs"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-secondary mb-1">Số ngày sử dụng</label>
+            <input 
+              type="number"
+              placeholder="1"
+              value={newTool.dailyDays}
+              onChange={(e) => setNewTool({ ...newTool, dailyDays: e.target.value })}
+              className="w-full bg-surface border border-outline-variant rounded px-2 py-1 text-on-surface text-xs"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-secondary mb-1">Thông tin phụ/Mô tả</label>
+            <input 
+              type="text"
+              placeholder="Phù hợp trải nghiệm nhanh"
+              value={newTool.dailyDescription}
+              onChange={(e) => setNewTool({ ...newTool, dailyDescription: e.target.value })}
+              className="w-full bg-surface border border-outline-variant rounded px-2 py-1 text-on-surface text-xs"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Monthly Plan Card */}
+      <div className="border border-outline-variant/60 rounded-lg p-3 bg-surface/30 space-y-3">
+        <h5 className="text-xs font-bold text-on-surface text-secondary uppercase tracking-wider">Cấu hình Gói Tháng</h5>
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+          <div>
+            <label className="block text-[10px] font-semibold text-secondary mb-1">Giá thuê (VND)</label>
+            <input 
+              type="number"
+              placeholder="Ví dụ: 200000"
+              value={newTool.monthlyPrice}
+              onChange={(e) => setNewTool({ ...newTool, monthlyPrice: e.target.value })}
+              className="w-full bg-surface border border-outline-variant rounded px-2 py-1 text-on-surface text-xs"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-secondary mb-1">Tên gói hiển thị</label>
+            <input 
+              type="text"
+              placeholder="Gói Tháng"
+              value={newTool.monthlyName}
+              onChange={(e) => setNewTool({ ...newTool, monthlyName: e.target.value })}
+              className="w-full bg-surface border border-outline-variant rounded px-2 py-1 text-on-surface text-xs"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-secondary mb-1">Số ngày sử dụng</label>
+            <input 
+              type="number"
+              placeholder="30"
+              value={newTool.monthlyDays}
+              onChange={(e) => setNewTool({ ...newTool, monthlyDays: e.target.value })}
+              className="w-full bg-surface border border-outline-variant rounded px-2 py-1 text-on-surface text-xs"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-secondary mb-1">Thông tin phụ/Mô tả</label>
+            <input 
+              type="text"
+              placeholder="Khuyên dùng, tiết kiệm nhất"
+              value={newTool.monthlyDescription}
+              onChange={(e) => setNewTool({ ...newTool, monthlyDescription: e.target.value })}
+              className="w-full bg-surface border border-outline-variant rounded px-2 py-1 text-on-surface text-xs"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Yearly Plan Card */}
+      <div className="border border-outline-variant/60 rounded-lg p-3 bg-surface/30 space-y-3">
+        <h5 className="text-xs font-bold text-on-surface text-secondary uppercase tracking-wider">Cấu hình Gói Năm</h5>
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+          <div>
+            <label className="block text-[10px] font-semibold text-secondary mb-1">Giá thuê (VND)</label>
+            <input 
+              type="number"
+              placeholder="Ví dụ: 1500000"
+              value={newTool.yearlyPrice}
+              onChange={(e) => setNewTool({ ...newTool, yearlyPrice: e.target.value })}
+              className="w-full bg-surface border border-outline-variant rounded px-2 py-1 text-on-surface text-xs"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-secondary mb-1">Tên gói hiển thị</label>
+            <input 
+              type="text"
+              placeholder="Gói Năm"
+              value={newTool.yearlyName}
+              onChange={(e) => setNewTool({ ...newTool, yearlyName: e.target.value })}
+              className="w-full bg-surface border border-outline-variant rounded px-2 py-1 text-on-surface text-xs"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-secondary mb-1">Số ngày sử dụng</label>
+            <input 
+              type="number"
+              placeholder="365"
+              value={newTool.yearlyDays}
+              onChange={(e) => setNewTool({ ...newTool, yearlyDays: e.target.value })}
+              className="w-full bg-surface border border-outline-variant rounded px-2 py-1 text-on-surface text-xs"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-secondary mb-1">Thông tin phụ/Mô tả</label>
+            <input 
+              type="text"
+              placeholder="Tiết kiệm lâu dài"
+              value={newTool.yearlyDescription}
+              onChange={(e) => setNewTool({ ...newTool, yearlyDescription: e.target.value })}
+              className="w-full bg-surface border border-outline-variant rounded px-2 py-1 text-on-surface text-xs"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Lifetime Plan Card */}
+      <div className="border border-outline-variant/60 rounded-lg p-3 bg-surface/30 space-y-3">
+        <h5 className="text-xs font-bold text-on-surface text-secondary uppercase tracking-wider">Cấu hình Gói Vĩnh Viễn</h5>
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+          <div>
+            <label className="block text-[10px] font-semibold text-secondary mb-1">Giá thuê (VND)</label>
+            <input 
+              type="number"
+              placeholder="Ví dụ: 3500000"
+              value={newTool.lifetimePrice}
+              onChange={(e) => setNewTool({ ...newTool, lifetimePrice: e.target.value })}
+              className="w-full bg-surface border border-outline-variant rounded px-2 py-1 text-on-surface text-xs"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-secondary mb-1">Tên gói hiển thị</label>
+            <input 
+              type="text"
+              placeholder="Gói Vĩnh Viễn"
+              value={newTool.lifetimeName}
+              onChange={(e) => setNewTool({ ...newTool, lifetimeName: e.target.value })}
+              className="w-full bg-surface border border-outline-variant rounded px-2 py-1 text-on-surface text-xs"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-secondary mb-1">Số ngày sử dụng (Mặc định vĩnh viễn)</label>
+            <input 
+              type="number"
+              placeholder="36500"
+              disabled
+              value={newTool.lifetimeDays}
+              className="w-full bg-surface/50 border border-outline-variant/60 rounded px-2 py-1 text-secondary text-xs cursor-not-allowed"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-secondary mb-1">Thông tin phụ/Mô tả</label>
+            <input 
+              type="text"
+              placeholder="Sử dụng trọn đời, update mãi mãi"
+              value={newTool.lifetimeDescription}
+              onChange={(e) => setNewTool({ ...newTool, lifetimeDescription: e.target.value })}
+              className="w-full bg-surface border border-outline-variant rounded px-2 py-1 text-on-surface text-xs"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+    <p className="text-[11px] text-secondary mt-1">
+      * Để trống hoặc nhập 0 đối với các gói không bán. Cần có ít nhất 1 gói được cấu hình.
+    </p>
+  </div>
+  )}
 
  </div>
  

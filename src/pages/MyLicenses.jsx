@@ -89,7 +89,7 @@ export default function MyLicenses() {
         productName: prod?.name || prodId,
         licenseKey: 'Không yêu cầu (Direct Run)',
         plan: activeData.plan || 'lifetime',
-        planName: activeData.plan === 'lifetime' ? 'Vĩnh viễn' : (activeData.plan === 'monthly' ? 'Gói tháng' : 'Gói của bạn'),
+        planName: prod?.plans?.[activeData.plan]?.name || (activeData.plan === 'lifetime' ? 'Vĩnh viễn' : (activeData.plan === 'monthly' ? 'Gói tháng' : (activeData.plan === 'yearly' ? 'Gói năm' : 'Gói của bạn'))),
         price: 0,
         status: 'active',
         hwid: null,
