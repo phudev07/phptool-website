@@ -152,6 +152,20 @@ const PRODUCTS = {
       'yearly': { name: '1 Năm', price: 500000, days: 365 },
       'lifetime': { name: 'Vĩnh viễn', price: 600000, days: -1 }
     }
+  },
+  // Independent catalog for the new desktop client. Never alias this to regfb:
+  // the two clients have different HWID/device-binding policies.
+  'reg_fb_v2': {
+    name: 'PHP-TOOL Reg FB v2',
+    plans: {
+      'daily': { name: '4 Ngày', price: 50000, days: 4 },
+      'monthly': { name: '1 Tháng', price: 300000, days: 30 },
+      'yearly': { name: '1 Năm', price: 2100000, days: 365 },
+      'lifetime': { name: 'Vĩnh viễn', price: 3500000, days: -1 }
+    },
+    requireHwid: true,
+    hwidFormat: 'sha256_hex_64',
+    requireDeviceBinding: true
   }
 };
 
@@ -189,7 +203,7 @@ exports.purchaseLicense = onCall(
     const uid = request.auth.uid;
     const email = request.auth.token.email || '';
 
-    const product = PRODUCTS[productId] || PRODUCTS['regfb'];
+    const product = PRODUCTS[String(productId || '').trim()];
     if (!product) {
       throw new HttpsError("invalid-argument", "Sản phẩm không tồn tại.");
     }
@@ -225,8 +239,8 @@ exports.purchaseLicense = onCall(
         let expiryDate;
         if (planKey === 'daily') {
           expiryDate = new Date();
-          expiryDate.setDate(expiryDate.getDate() + 1);
-          // Set to end of tomorrow
+          expiryDate.setDate(expiryDate.getDate() + Math.max(Number(plan.days) || 0, 1));
+          // Set to the end of the configured trial period.
           expiryDate.setHours(23, 59, 59, 999);
         } else {
           expiryDate = getExpiryDate(plan.days);
@@ -236,13 +250,14 @@ exports.purchaseLicense = onCall(
         t.set(licenseRef, {
           userId: uid,
           userEmail: email,
-          productId: productId || 'regfb',
+          productId: String(productId).trim(),
           licenseKey: licenseKey,
           plan: planKey,
           planName: plan.name,
           price: plan.price,
           status: 'active',
           hwid: null,
+          ...(product.requireDeviceBinding ? { devicePublicKey: null } : {}),
           expiresAt: expiryDate ? admin.firestore.Timestamp.fromDate(expiryDate) : null,
           createdAt: admin.firestore.FieldValue.serverTimestamp()
         });
@@ -252,7 +267,7 @@ exports.purchaseLicense = onCall(
           userId: uid,
           type: 'license_purchase',
           amount: -plan.price,
-          productId: productId || 'regfb',
+          productId: String(productId).trim(),
           description: `Mua ${product.name} - ${plan.name}`,
           createdAt: admin.firestore.FieldValue.serverTimestamp()
         });
@@ -326,6 +341,7 @@ exports.renewLicense = onCall({ region: "asia-southeast1", cors: true }, async (
         // defined in client matching structure
         const RENEWAL_OPTIONS = {
           'regfb': { '1_month': { name: '1 Tháng', price: 200000, days: 30 }, '1_year': { name: '1 Năm', price: 500000, days: 365 } },
+          'reg_fb_v2': { '1_month': { name: '1 Tháng', price: 300000, days: 30 }, '1_year': { name: '1 Năm', price: 2100000, days: 365 } },
           'clonetk': { '1_month': { name: '1 Tháng', price: 300000, days: 30 }, '1_year': { name: '1 Năm', price: 700000, days: 365 } },
           'seoyt': { '1_month': { name: '1 Tháng', price: 400000, days: 30 }, '1_year': { name: '1 Năm', price: 900000, days: 365 } }
         };

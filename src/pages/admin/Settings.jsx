@@ -41,6 +41,8 @@ export default function AdminSettings() {
     lifetimeDescription: 'Sử dụng trọn đời, update mãi mãi',
     type: 'php-tool',
     requireHwid: true,
+    hwidFormat: 'legacy',
+    requireDeviceBinding: false,
     videoTutorial: '',
     features: '',
     hidden: false
@@ -73,6 +75,8 @@ export default function AdminSettings() {
     lifetimeName: 'Gói Vĩnh Viễn',
     lifetimeDescription: 'Sử dụng trọn đời, update mãi mãi',
     requireHwid: true,
+    hwidFormat: 'legacy',
+    requireDeviceBinding: false,
     videoTutorial: '',
     features: 'Cập nhật phiên bản tự động\nHỗ trợ đa luồng siêu tốc\nTương thích Windows 10/11',
     hidden: false
@@ -133,6 +137,8 @@ export default function AdminSettings() {
           lifetimeDescription: prod.plans?.lifetime?.description || 'Sử dụng trọn đời, update mãi mãi',
           type: prod.type || 'php-tool',
           requireHwid: prod.requireHwid !== false,
+          hwidFormat: prod.hwidFormat || 'legacy',
+          requireDeviceBinding: prod.requireDeviceBinding === true,
           videoTutorial: prod.videoTutorial || '',
           features: Array.isArray(prod.features) ? prod.features.join('\n') : '',
           hidden: prod.hidden === true
@@ -223,6 +229,8 @@ export default function AdminSettings() {
         badge: editFields.type === 'free' ? 'Miễn phí' : editFields.type === 'crack' ? 'Vĩnh viễn' : 'Thuê / Vĩnh viễn',
         plans: plans,
         requireHwid: editFields.requireHwid !== false,
+        hwidFormat: editFields.hwidFormat || 'legacy',
+        requireDeviceBinding: editFields.requireHwid !== false && editFields.requireDeviceBinding === true,
         videoTutorial: editFields.videoTutorial || '',
         features: editFields.features ? editFields.features.split('\n').map(f => f.trim()).filter(f => f !== '') : [],
         hidden: editFields.hidden === true
@@ -348,6 +356,8 @@ export default function AdminSettings() {
         changelog: '- Phiên bản khởi tạo đầu tiên.',
         icon: icon,
         requireHwid: newTool.requireHwid !== false,
+        hwidFormat: newTool.hwidFormat || 'legacy',
+        requireDeviceBinding: newTool.requireHwid !== false && newTool.requireDeviceBinding === true,
         hidden: newTool.hidden === true
       };
 
@@ -385,6 +395,8 @@ export default function AdminSettings() {
         lifetimeName: 'Gói Vĩnh Viễn',
         lifetimeDescription: 'Sử dụng trọn đời, update mãi mãi',
         requireHwid: true,
+        hwidFormat: 'legacy',
+        requireDeviceBinding: false,
         hidden: false
       });
 
@@ -559,11 +571,35 @@ export default function AdminSettings() {
                       <input 
                         type="checkbox" 
                         checked={editFields.requireHwid !== false}
-                        onChange={(e) => setEditFields({ ...editFields, requireHwid: e.target.checked })}
+                        onChange={(e) => setEditFields({ ...editFields, requireHwid: e.target.checked, requireDeviceBinding: e.target.checked ? editFields.requireDeviceBinding : false })}
                         className="sr-only peer"
                       />
                       <div className="w-11 h-6 bg-surface-container-high peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-secondary after:border-outline-variant after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#c21a5b] peer-checked:after:bg-white"></div>
                     </label>
+                  </div>
+
+                  {/* Device binding policy (per product) */}
+                  <div className="mt-4 space-y-3 p-3 bg-surface-container-low border border-outline-variant rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-semibold text-on-surface">Require Device Public Key</span>
+                        <span className="text-xs text-secondary">Enable only for clients that support device binding.</span>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer select-none">
+                        <input type="checkbox" checked={editFields.requireDeviceBinding === true}
+                          onChange={(e) => setEditFields({ ...editFields, requireDeviceBinding: e.target.checked, requireHwid: e.target.checked ? true : editFields.requireHwid })} className="sr-only peer" />
+                        <div className="w-11 h-6 bg-surface-container-high rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-secondary after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#c21a5b] peer-checked:after:bg-white"></div>
+                      </label>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-secondary mb-1">HWID format</label>
+                      <select className="w-full bg-surface border border-outline-variant rounded-lg px-3 py-2 text-sm text-on-surface"
+                        value={editFields.hwidFormat || 'legacy'} onChange={(e) => setEditFields({ ...editFields, hwidFormat: e.target.value })}>
+                        <option value="legacy">Legacy (unchanged)</option>
+                        <option value="sha256_hex_64">SHA-256 hex (64 characters)</option>
+                        <option value="none">No format validation</option>
+                      </select>
+                    </div>
                   </div>
 
                   {/* Hidden Toggle Switch */}
@@ -959,11 +995,35 @@ export default function AdminSettings() {
                     <input 
                       type="checkbox" 
                       checked={newTool.requireHwid !== false}
-                      onChange={(e) => setNewTool({ ...newTool, requireHwid: e.target.checked })}
+                      onChange={(e) => setNewTool({ ...newTool, requireHwid: e.target.checked, requireDeviceBinding: e.target.checked ? newTool.requireDeviceBinding : false })}
                       className="sr-only peer"
                     />
                     <div className="w-9 h-5 bg-surface-container-high peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-secondary after:border-outline-variant after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#c21a5b] peer-checked:after:bg-white"></div>
                   </label>
+                </div>
+
+                {/* Device binding policy (per product) */}
+                <div className="mt-2 space-y-3 p-2.5 bg-surface border border-outline-variant rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="flex flex-col">
+                      <span className="text-xs font-semibold text-on-surface">Require Device Public Key</span>
+                      <span className="text-[10px] text-secondary">Enable only for clients that support device binding.</span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer select-none">
+                      <input type="checkbox" checked={newTool.requireDeviceBinding === true}
+                        onChange={(e) => setNewTool({ ...newTool, requireDeviceBinding: e.target.checked, requireHwid: e.target.checked ? true : newTool.requireHwid })} className="sr-only peer" />
+                      <div className="w-9 h-5 bg-surface-container-high rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-secondary after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#c21a5b] peer-checked:after:bg-white"></div>
+                    </label>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-secondary mb-1">HWID format</label>
+                    <select className="w-full bg-surface border border-outline-variant rounded-lg px-3 py-2 text-xs text-on-surface"
+                      value={newTool.hwidFormat || 'legacy'} onChange={(e) => setNewTool({ ...newTool, hwidFormat: e.target.value })}>
+                      <option value="legacy">Legacy (unchanged)</option>
+                      <option value="sha256_hex_64">SHA-256 hex (64 characters)</option>
+                      <option value="none">No format validation</option>
+                    </select>
+                  </div>
                 </div>
 
                 {/* Hidden Toggle for new tool */}

@@ -8,6 +8,48 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
+    // Product-scoped security policies. Missing fields intentionally fall back
+    // to the legacy behavior so already released tools keep working.
+    function productRequiresDeviceBinding(productId) {
+      return exists(/databases/$(database)/documents/products/$(productId)) &&
+        (
+          (
+            'requireDeviceBinding' in get(/databases/$(database)/documents/products/$(productId)).data &&
+            get(/databases/$(database)/documents/products/$(productId)).data.requireDeviceBinding == true
+          ) ||
+          (
+            !('requireDeviceBinding' in get(/databases/$(database)/documents/products/$(productId)).data) &&
+            productId == 'reg_fb_v2'
+          )
+        );
+    }
+
+    function isSha256Hwid(value) {
+      return value is string && value.matches('^[a-f0-9]{64}$');
+    }
+
+    function productRequiresSha256Hwid(productId) {
+      return exists(/databases/$(database)/documents/products/$(productId)) &&
+        (
+          (
+            'hwidFormat' in get(/databases/$(database)/documents/products/$(productId)).data &&
+            get(/databases/$(database)/documents/products/$(productId)).data.hwidFormat == 'sha256_hex_64'
+          ) ||
+          (
+            !('hwidFormat' in get(/databases/$(database)/documents/products/$(productId)).data) &&
+            productId == 'reg_fb_v2'
+          )
+        );
+    }
+
+    function isValidHwidForProduct(productId, value) {
+      return !productRequiresSha256Hwid(productId) || isSha256Hwid(value);
+    }
+
+    function isDevicePublicKey(value) {
+      return value is string && value.matches('^[A-Za-z0-9_-]{43}$');
+    }
+
     // ==========================================
     // BẢO MẬT BẢNG USERS (Thông tin thành viên)
     // ==========================================
@@ -73,7 +115,7 @@ service cloud.firestore {
       // Cho phép người dùng đọc danh sách bản quyền của mình
       // Hoặc client tool đọc để check bản quyền dựa trên HWID
       allow read: if (request.auth != null && resource.data.userId == request.auth.uid) ||
-                    (resource.data.hwid != null);
+                    (resource.data.hwid != null && !productRequiresDeviceBinding(resource.data.productId));
       
       // Cho phép người dùng tự tạo bản quyền khi mua hàng, với điều kiện:
       // 1. Bản quyền phải đăng ký đúng UID của họ.
@@ -93,6 +135,7 @@ service cloud.firestore {
                     (
                       // Trường hợp 1: Cập nhật HWID thông thường
                       (
+                        !productRequiresDeviceBinding(resource.data.productId) &&
                         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['plan', 'expiresAt', 'productId', 'userId', 'licenseKey', 'price']) &&
                         (
                           request.resource.data.status == resource.data.status ||
@@ -113,9 +156,53 @@ service cloud.firestore {
                            )
                           ) ||
                           // Bind HWID (from null to non-null)
-                          (resource.data.hwid == null && request.resource.data.hwid != null) ||
+                          (resource.data.hwid == null && request.resource.data.hwid != null &&
+                           isValidHwidForProduct(resource.data.productId, request.resource.data.hwid)) ||
                           // Keep HWID (no change)
                           (resource.data.hwid == request.resource.data.hwid)
+                        )
+                      ) ||
+                      // Device-bound products bind HWID and public key atomically.
+                      (
+                        productRequiresDeviceBinding(resource.data.productId) &&
+                        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['plan', 'expiresAt', 'productId', 'userId', 'licenseKey', 'price']) &&
+                        (
+                          request.resource.data.status == resource.data.status ||
+                          (resource.data.status == 'pending' && request.resource.data.status == 'active')
+                        ) &&
+                        (
+                          (
+                            request.resource.data.hwid == null &&
+                            request.resource.data.devicePublicKey == null &&
+                            resource.data.hwid != null &&
+                            (
+                              !('hwidHistory' in resource.data) ||
+                              (
+                                request.resource.data.hwidHistory.size() == resource.data.hwidHistory.size() + 1 &&
+                                (
+                                  (resource.data.plan == 'lifetime' && request.resource.data.hwidHistory.size() <= 6) ||
+                                  (resource.data.plan != 'lifetime' && request.resource.data.hwidHistory.size() <= 3)
+                                )
+                              )
+                            )
+                          ) ||
+                          (
+                            resource.data.hwid == null &&
+                            (!('devicePublicKey' in resource.data) || resource.data.devicePublicKey == null) &&
+                            isValidHwidForProduct(resource.data.productId, request.resource.data.hwid) &&
+                            isDevicePublicKey(request.resource.data.devicePublicKey)
+                          ) ||
+                          (
+                            resource.data.hwid != null &&
+                            request.resource.data.hwid == resource.data.hwid &&
+                            isValidHwidForProduct(resource.data.productId, request.resource.data.hwid) &&
+                            (!('devicePublicKey' in resource.data) || resource.data.devicePublicKey == null) &&
+                            isDevicePublicKey(request.resource.data.devicePublicKey)
+                          ) ||
+                          (
+                            request.resource.data.hwid == resource.data.hwid &&
+                            request.resource.data.devicePublicKey == resource.data.devicePublicKey
+                          )
                         )
                       ) ||
                       // Trường hợp 2: Gia hạn / mua thêm ngày sử dụng (Giao dịch trừ tiền)
@@ -167,7 +254,10 @@ service cloud.firestore {
       allow read, delete, update: if isAdmin();
       
       // Cho phép tạo log mới từ xa (Để tool Python chạy từ máy người dùng gửi log về lưu trữ)
-      allow create: if true;
+      // Legacy clients keep their existing direct-write path. reg_fb_v2 logs
+      // are accepted only through the trusted backend (Admin SDK bypasses rules).
+      allow create: if !('productId' in request.resource.data) ||
+                       request.resource.data.productId != 'reg_fb_v2';
     }
 
     // ==========================================

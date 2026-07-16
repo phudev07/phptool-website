@@ -3,6 +3,10 @@ import { Smartphone, Facebook, Mail, Box, Code, Youtube } from 'lucide-react';
 export const PRODUCTS = [
   {
     id: 'regfb',
+    // Legacy product: preserve the historical HWID format and flow.
+    requireHwid: true,
+    hwidFormat: 'legacy',
+    requireDeviceBinding: false,
     name: 'Tool Auto Reg/Very FB LD và Phone',
     tagline: 'Công cụ đắc lực cho dân MMO',
     description: 'Tự động hóa hoàn toàn quá trình tạo và nuôi tài khoản Facebook số lượng lớn trên môi trường giả lập LDPlayer và điện thoại thật.',
@@ -60,6 +64,31 @@ export const PRODUCTS = [
         popular: false,
         best: true
       }
+    }
+  },
+  {
+    id: 'reg_fb_v2',
+    name: 'PHP-TOOL Reg FB v2',
+    tagline: 'Independent next-generation Reg FB client',
+    description: 'Facebook registration tool v2 with an independent license and SHA-256 device binding.',
+    type: 'php-tool',
+    badge: 'Subscription / Lifetime',
+    image: 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=800&q=80',
+    videoTutorial: '',
+    features: [
+      'Independent from the legacy regfb product',
+      'Requires a 64-character SHA-256 HWID',
+      'Requires a Device Public Key for device binding'
+    ],
+    highlights: [],
+    requireHwid: true,
+    hwidFormat: 'sha256_hex_64',
+    requireDeviceBinding: true,
+    plans: {
+      daily: { name: '4-Day Trial', price: 50000, days: 4, description: 'Short evaluation plan', popular: false },
+      monthly: { name: 'Monthly', price: 300000, days: 30, description: 'Full Reg FB v2 feature set', popular: true },
+      yearly: { name: 'Yearly', price: 2100000, days: 365, description: 'Long-term plan', popular: false },
+      lifetime: { name: 'Lifetime', price: 3500000, days: 36500, description: 'Lifetime access', popular: false, best: true }
     }
   },
   {

@@ -15,6 +15,7 @@ export default function MyLicenses() {
  
  // HWID input for each license
  const [hwidInput, setHwidInput] = useState('');
+ const [devicePublicKeyInput, setDevicePublicKeyInput] = useState('');
  const [activating, setActivating] = useState(false);
  const [resetting, setResetting] = useState(false);
  const [showInstructions, setShowInstructions] = useState(false);
@@ -116,6 +117,7 @@ export default function MyLicenses() {
    if (matchedLic) {
      setSelectedLicense(matchedLic);
      setHwidInput(matchedLic.hwid || '');
+     setDevicePublicKeyInput(matchedLic.devicePublicKey || '');
      // Fetch secure URL
      try {
        const secureDocRef = doc(db, 'products_secure', matchedLic.productId);
@@ -129,10 +131,12 @@ export default function MyLicenses() {
    } else {
      setSelectedLicense(null);
      setHwidInput('');
+     setDevicePublicKeyInput('');
    }
  } else {
    setSelectedLicense(null);
    setHwidInput('');
+   setDevicePublicKeyInput('');
  }
  } catch (error) {
  console.error('Error fetching user licenses:', error);
@@ -181,14 +185,26 @@ export default function MyLicenses() {
  setTimeout(() => setCopiedKey(false), 2000);
  }
 
-  async function handleActivateHwid() {
-    if (!selectedLicense || !hwidInput.trim()) return;
+ async function handleActivateHwid() {
+    if (!selectedLicense) return;
+    const selectedProduct = productsMap[selectedLicense.productId];
+    const requiresBinding = selectedProduct?.requireDeviceBinding === true;
+    const hwid = hwidInput.trim();
+    const devicePublicKey = devicePublicKeyInput.trim();
+    if (!hwid) return;
+    if (selectedProduct?.hwidFormat === 'sha256_hex_64' && !/^[a-f0-9]{64}$/.test(hwid)) {
+      alert('This product requires a lowercase 64-character SHA-256 HWID.');
+      return;
+    }
+    if (requiresBinding && !/^[A-Za-z0-9_-]{43}$/.test(devicePublicKey)) {
+      alert('Invalid Device Public Key. Enter a 43-character base64url key.');
+      return;
+    }
     setActivating(true);
     try {
       const docRef = doc(db,'licenses', selectedLicense.id);
-      const updatePayload = {
-        hwid: hwidInput.trim()
-      };
+      const updatePayload = { hwid };
+      if (requiresBinding) updatePayload.devicePublicKey = devicePublicKey;
       if (selectedLicense.status !== 'active') {
         updatePayload.status = 'active';
       }
@@ -197,7 +213,7 @@ export default function MyLicenses() {
       // Update state
       const updatedLicenses = licenses.map(l => {
         if (l.id === selectedLicense.id) {
-          const updated = { ...l, hwid: hwidInput.trim(), status:'active' };
+          const updated = { ...l, hwid, ...(requiresBinding ? { devicePublicKey } : {}), status:'active' };
           setSelectedLicense(updated);
           return updated;
         }
@@ -248,15 +264,18 @@ export default function MyLicenses() {
       const docRef = doc(db,'licenses', selectedLicense.id);
       await updateDoc(docRef, {
         hwid: null,
-        hwidHistory: updatedHistory
+        hwidHistory: updatedHistory,
+        ...(productsMap[selectedLicense.productId]?.requireDeviceBinding === true ? { devicePublicKey: null } : {})
       });
 
       // Update state
       const updatedLicenses = licenses.map(l => {
         if (l.id === selectedLicense.id) {
-          const updated = { ...l, hwid: null, hwidHistory: updatedHistory };
+          const updated = { ...l, hwid: null, hwidHistory: updatedHistory,
+            ...(productsMap[selectedLicense.productId]?.requireDeviceBinding === true ? { devicePublicKey: null } : {}) };
           setSelectedLicense(updated);
           setHwidInput('');
+          setDevicePublicKeyInput('');
           return updated;
         }
         return l;
@@ -273,6 +292,7 @@ export default function MyLicenses() {
  async function handleSelectLicense(lic) {
     setSelectedLicense(lic);
     setHwidInput(lic.hwid ||'');
+    setDevicePublicKeyInput(lic.devicePublicKey || '');
     setShowInstructions(false);
     setSecureDownloadUrl('');
 
@@ -543,6 +563,7 @@ export default function MyLicenses() {
 
       {selectedLicense.hwid ? (
       /* Bound HWID State */
+      <>
       <div className="flex flex-col sm:flex-row gap-3">
       <input 
       className="flex-1 bg-surface-container-low border border-outline-variant rounded-lg py-3 px-4 font-mono-sm text-mono-sm text-secondary" 
@@ -565,6 +586,28 @@ export default function MyLicenses() {
       )}
       </button>
       </div>
+      {selectedProduct?.requireDeviceBinding === true && (
+        <div className="mt-3 space-y-2">
+          <label className="block text-xs text-secondary">Device Public Key (base64url)</label>
+          <div className="flex gap-3">
+            <input
+              className="flex-1 bg-surface-container-low border border-outline-variant rounded-lg py-3 px-4 font-mono-sm text-mono-sm text-secondary"
+              readOnly={Boolean(selectedLicense.devicePublicKey)}
+              placeholder="Paste the 43-character Device Public Key..."
+              value={devicePublicKeyInput}
+              onChange={(e) => setDevicePublicKeyInput(e.target.value)}
+            />
+            {!selectedLicense.devicePublicKey && (
+              <button onClick={handleActivateHwid} disabled={activating || !hwidInput.trim() || !devicePublicKeyInput.trim()}
+                className="bg-gradient-to-r from-[#c21a5b] to-[#571477] text-white font-label-md text-xs py-3 px-4 rounded-lg disabled:opacity-50">
+                {activating ? 'Saving...' : 'Bind device'}
+              </button>
+            )}
+          </div>
+          <p className="text-xs text-secondary">Public key is stored only for licenses with device binding enabled. Legacy regfb licenses are unchanged.</p>
+        </div>
+      )}
+      </>
       ) : (
       /* Unbound HWID State: Activate input */
       <div className="flex gap-3">
@@ -575,9 +618,17 @@ export default function MyLicenses() {
       value={hwidInput}
       onChange={(e) => setHwidInput(e.target.value)}
       />
+      {selectedProduct?.requireDeviceBinding === true && (
+        <input
+          className="flex-1 bg-surface border border-outline-variant rounded-lg py-3 px-4 font-mono-sm text-mono-sm text-on-surface focus:outline-none focus:border-[#c21a5b]"
+          placeholder="Device Public Key (43 characters)"
+          value={devicePublicKeyInput}
+          onChange={(e) => setDevicePublicKeyInput(e.target.value)}
+        />
+      )}
       <button 
       onClick={handleActivateHwid}
-      disabled={activating || !hwidInput.trim()}
+      disabled={activating || !hwidInput.trim() || (selectedProduct?.requireDeviceBinding === true && !devicePublicKeyInput.trim())}
       className="bg-gradient-to-r from-[#c21a5b] to-[#571477] text-white font-label-md text-label-md py-3 px-6 rounded-lg hover:bg-on-primary-fixed-variant transition-colors whitespace-nowrap disabled:bg-surface-container-high disabled:text-secondary disabled:cursor-not-allowed flex items-center justify-center"
       >
       {activating ? (

@@ -216,6 +216,7 @@ export default function AdminLicenses() {
  userId: isLinkedUser ? newLicense.userId : null,
  userEmail: isLinkedUser ? users[newLicense.userId]?.email : null,
  hwid: hasHwid ? newLicense.hwid.trim() : null,
+ ...(targetProduct?.requireDeviceBinding === true ? { devicePublicKey: null } : {}),
  hwidHistory: [],
  createdAt: serverTimestamp(),
  activatedAt: hasHwid || isLinkedUser ? serverTimestamp() : null,
@@ -322,11 +323,15 @@ export default function AdminLicenses() {
  hwidHistory.push(currentHwid);
  }
  
- await updateDoc(doc(db,'licenses', licenseId), { 
+ const updatePayload = {
  hwid: null,
  hwidHistory: hwidHistory
- });
- setLicenses(licenses.map(l => l.id === licenseId ? { ...l, hwid: null, hwidHistory } : l));
+ };
+ if (license?.productId && productsMap[license.productId]?.requireDeviceBinding === true) {
+   updatePayload.devicePublicKey = null;
+ }
+ await updateDoc(doc(db,'licenses', licenseId), updatePayload);
+ setLicenses(licenses.map(l => l.id === licenseId ? { ...l, ...updatePayload } : l));
  alert('Reset HWID thành công!');
  } catch (error) {
  console.error('Error resetting HWID:', error);

@@ -232,6 +232,7 @@ export default function BuyLicense() {
             price: plan.price,
             status: 'active',
             hwid: null,
+            ...(product.requireDeviceBinding === true ? { devicePublicKey: null } : {}),
             hwidHistory: [],
             expiresAt: newExpiryDate,
             createdAt: serverTimestamp()
