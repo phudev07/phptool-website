@@ -322,16 +322,24 @@ export default function AdminDeposits() {
  filteredDeposits.map(dep => (
  <tr key={dep.id} className="hover:bg-surface-container-low transition-colors">
  <td className="px-6 py-4 font-mono-sm text-xs font-semibold">
- {dep.orderId || dep.id.substring(0, 10).toUpperCase()}
+   <div className="max-w-[150px] break-all">
+     {dep.orderId || dep.id.substring(0, 10).toUpperCase()}
+   </div>
  </td>
- <td className="px-6 py-4 text-xs font-semibold break-all">
- {dep.userEmail || dep.userId}
+ <td className="px-6 py-4 text-xs font-semibold">
+   <div className="max-w-[200px] break-all">
+     {dep.userEmail || dep.userId}
+   </div>
  </td>
  <td className="px-6 py-4 font-bold text-[#c21a5b]">
- +{formatMoney(dep.amount)}đ
+   <div className="max-w-[150px] break-all">
+     +{formatMoney(dep.amount)}đ
+   </div>
  </td>
  <td className="px-6 py-4 text-on-surface-variant text-xs">
- {dep.memo || dep.description ||'Nạp số dư'}
+   <div className="max-w-[220px] break-words">
+     {dep.memo || dep.description ||'Nạp số dư'}
+   </div>
  </td>
  <td className="px-6 py-4 text-on-surface-variant text-xs">
  {dep.createdAt?.toDate 
