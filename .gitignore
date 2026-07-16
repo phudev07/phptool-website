@@ -35,3 +35,10 @@ client_secret*.json
 *.pem
 *.key
 
+# Private security architecture, audit and retest reports
+**/security_report*.md
+**/security_assessment*.md
+**/retest_report*.md
+**/security-reports/**
+**/private-security/**
+
