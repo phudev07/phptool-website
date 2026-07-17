@@ -77,14 +77,33 @@ export default function AdminLicenses() {
     const delayDebounce = setTimeout(async () => {
       setIsSearchingUsers(true);
       try {
-        const q = query(
-          collection(db, 'users'),
-          where('email', '>=', userSearchTerm.toLowerCase()),
-          where('email', '<=', userSearchTerm.toLowerCase() + '\uf8ff'),
-          limit(5)
-        );
-        const snap = await getDocs(q);
-        const results = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const termLower = userSearchTerm.toLowerCase().trim();
+        const termCapitalized = termLower.charAt(0).toUpperCase() + termLower.slice(1);
+        const termUpper = userSearchTerm.toUpperCase().trim();
+        
+        const queryTerms = Array.from(new Set([termLower, termCapitalized, termUpper]));
+        
+        // Fetch matching users in parallel across possible case prefixes
+        const promises = queryTerms.map(term => {
+          const q = query(
+            collection(db, 'users'),
+            where('email', '>=', term),
+            where('email', '<=', term + '\uf8ff'),
+            limit(5)
+          );
+          return getDocs(q);
+        });
+        
+        const snaps = await Promise.all(promises);
+        const resultsMap = {};
+        
+        snaps.forEach(snap => {
+          snap.docs.forEach(doc => {
+            resultsMap[doc.id] = { id: doc.id, ...doc.data() };
+          });
+        });
+        
+        const results = Object.values(resultsMap).slice(0, 5);
         setSearchedUsers(results);
       } catch (error) {
         console.error('Error searching users:', error);
