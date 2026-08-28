@@ -1,3 +1,4 @@
+// Prerender script - generates static SEO pages from Firestore products
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
